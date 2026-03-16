@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Toilradar">
+  <meta name="application-name" content="Toilradar">
+  <meta property="og:title" content="Toilradar">
+  <meta property="og:description" content="近くのトイレをすぐに見つけよう">
+  <title>Toilradar</title>
+  <!-- Firebase SDK -->
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <!-- Google Maps -->
+  <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAobI9Wu7ci3lfrjzdzZQWAcgk5sSA5On0&callback=initMap&language=ja&libraries=places"></script>
+  <script>
+    window.isNative = !!(window.Capacitor?.isNativePlatform?.());
+    window.gm_authFailure = function() {
+      document.body.innerHTML = '<div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;gap:16px;padding:30px;text-align:center"><div style="font-size:3rem">⚠️</div><div style="font-size:1.1rem;font-weight:700;color:#e53935">Google Maps 認証エラー</div><div style="font-size:0.9rem;color:#666;line-height:1.7">課金アカウントが wanttoilet プロジェクトに<br>リンクされていません。<br><br><a href="https://console.cloud.google.com/billing/linkedaccount?project=wanttoilet" style="color:#1a73e8">Google Cloud Console で確認する →</a></div></div>';
+    };
+  </script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html, body, button, input, select, textarea {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    :root {
+      --safe-top: env(safe-area-inset-top, 0px);
+      --safe-bottom: env(safe-area-inset-bottom, 0px);
+      --blue: #1a73e8;
+      --green: #34a853;
+      --orange: #e37400;
+      --red: #ea4335;
+      --sheet-peek: 110px;
+      --sheet-half: 50vh;
+      --sheet-full: 88vh;
+    }
+
+    body {
+      font-family: 'Hiragino Sans', 'Hiragino Kaku Gothic ProN', -apple-system, BlinkMacSystemFont, sans-serif;
+      height: 100dvh;
+      overflow: hidden;
+    }
+
+    #map-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    /* ===================== フローティングUI ===================== */
+    #top-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      padding: max(12px, var(--safe-top)) 12px 8px;
+      z-index: 100;
+      pointer-events: none;
+    }
+
+    #search-bar {
+      display: flex;
+      align-items: center;
+      background: white;
+      border-radius: 14px;
+      padding: 10px 14px;
+      box-shadow: 0 2px 12px rgba(0,0,0,0.18);
+      gap: 8px;
+      pointer-events: all;
+      margin-bottom: 10px;
+    }
+
+    #search-bar .app-title { font-size: 1.1rem; font-weight: 800; color: var(--blue); white-space: nowrap; }
+    #search-bar input { flex: 1; border: none; outline: none; font-size: 0.95rem; color: #333; background: transparent; min-width: 0; }
+    #search-bar input::placeholder { color: #bbb; }
+    #search-bar .si { color: #aaa; font-size: 1rem; }
+    .clear-btn { background: #e0e0e0; border: none; border-radius: 50%; width: 20px; height: 20px; font-size: 0.7rem; cursor: pointer; display: none; align-items: center; justify-content: center; color: #666; pointer-events: all; }
+    .clear-btn.show { display: flex; }
+
+    #filter-chips { display: flex; gap: 6px; overflow-x: auto; pointer-events: all; }
+    #filter-chips::-webkit-scrollbar { display: none; }
+
+    .chip {
+      background: white;
+      border: 2px solid transparent;
+      border-radius: 20px;
+      padding: 5px 12px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      white-space: nowrap;
+      cursor: pointer;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.15);
+      color: #444;
+      transition: all 0.15s;
+    }
+    .chip.active { background: var(--blue); color: white; border-color: var(--blue); }
+    .chip:active { transform: scale(0.95); }
+    .dot { display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:4px; vertical-align:middle; flex-shrink:0; }
+
+    /* ===================== FAB ===================== */
+    #fab-group {
+      position: fixed;
+      right: 14px;
+      bottom: calc(var(--sheet-peek) + 16px);
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      z-index: 100;
+      transition: bottom 0.35s cubic-bezier(.4,0,.2,1);
+    }
+
+    .fab {
+      width: 48px; height: 48px;
+      border-radius: 50%;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2rem;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.25);
+      transition: transform 0.15s;
+    }
+    .fab:active { transform: scale(0.92); }
+    #fab-add { background: var(--blue); color: white; font-size: 1.5rem; width: 54px; height: 54px; }
+    #fab-locate { background: white; color: #444; }
+
+    #search-area-btn {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: white;
+      border: none;
+      border-radius: 22px;
+      padding: 10px 20px;
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: var(--blue);
+      box-shadow: 0 3px 12px rgba(0,0,0,0.22);
+      z-index: 100;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+    #search-area-btn.show { display: flex; }
+    #search-area-btn:active { transform: translate(-50%,-50%) scale(0.96); }
+
+    /* ===================== ボトムシート ===================== */
+    #bottom-sheet {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      height: var(--sheet-full);
+      background: white;
+      border-radius: 20px 20px 0 0;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+      z-index: 200;
+      transform: translateY(calc(100% - var(--sheet-peek)));
+      transition: transform 0.35s cubic-bezier(.4,0,.2,1);
+      display: flex;
+      flex-direction: column;
+      touch-action: none;
+      padding-bottom: var(--safe-bottom);
+    }
+    #bottom-sheet.snap-peek  { transform: translateY(calc(100% - var(--sheet-peek))); }
+    #bottom-sheet.snap-half  { transform: translateY(calc(100% - var(--sheet-half))); }
+    #bottom-sheet.snap-full  { transform: translateY(calc(100% - var(--sheet-full))); }
+    #bottom-sheet.no-tr { transition: none; }
+
+    #sheet-header { flex-shrink: 0; padding: 10px 16px 8px; cursor: grab; }
+    #sheet-header:active { cursor: grabbing; }
+    #sheet-handle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 10px; }
+    #sheet-title-row { display: flex; align-items: center; justify-content: space-between; }
+    #sheet-count { font-size: 0.95rem; font-weight: 700; color: #222; }
+    #sheet-count span { color: var(--blue); }
+
+    #sync-indicator { font-size: 0.75rem; display: flex; align-items: center; gap: 4px; color: #888; }
+    #sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; transition: background 0.3s; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+    #sheet-list { flex: 1; overflow-y: auto; padding: 4px 12px 16px; -webkit-overflow-scrolling: touch; }
+    #sheet-list::-webkit-scrollbar { display: none; }
+
+    .toilet-card {
+      background: white;
+      border: 1.5px solid #f0f0f0;
+      border-radius: 14px;
+      padding: 14px;
+      margin-bottom: 10px;
+      cursor: pointer;
+      transition: all 0.15s;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .toilet-card:active { background: #f8f9ff; transform: scale(0.99); }
+    .toilet-card.selected { border-color: var(--blue); background: #f0f6ff; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
+
+    .card-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
+    .card-body { flex: 1; min-width: 0; }
+    .card-name { font-size: 0.97rem; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
+    .type-badge { font-size: 0.72rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: white; }
+    .card-rating { font-size: 0.82rem; color: #f4b400; font-weight: 700; }
+    .card-rating .nr { color: #bbb; font-weight: 400; }
+    .card-amenities { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+    .amenity-tag { font-size: 0.72rem; background: #f1f3f4; color: #555; padding: 2px 7px; border-radius: 8px; }
+    .card-notes { font-size: 0.8rem; color: #888; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-edit-btn { background: none; border: 1.5px solid #ddd; border-radius: 10px; padding: 6px 10px; font-size: 0.8rem; color: #666; cursor: pointer; flex-shrink: 0; align-self: center; }
+    .card-edit-btn:active { background: #f0f0f0; }
+
+    #empty-state { display: none; flex-direction: column; align-items: center; padding: 40px 20px; color: #bbb; text-align: center; gap: 8px; }
+    #empty-state .ei { font-size: 3rem; }
+    #empty-state .et { font-size: 1rem; font-weight: 600; color: #aaa; }
+    #empty-state .es { font-size: 0.85rem; }
+
+    #loading-state { display: flex; flex-direction: column; align-items: center; padding: 40px 20px; gap: 8px; }
+    .loading-spinner { width: 36px; height: 36px; border: 3px solid #f0f0f0; border-top-color: var(--blue); border-radius: 50%; animation: spin 0.8s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ===================== モーダル ===================== */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 1000;
+      align-items: flex-end;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: white;
+      border-radius: 20px 20px 0 0;
+      width: 100%;
+      max-width: 600px;
+      max-height: 92dvh;
+      overflow-y: auto;
+      box-shadow: 0 -4px 30px rgba(0,0,0,0.2);
+      padding-bottom: var(--safe-bottom);
+    }
+    .modal-handle-bar { display: flex; justify-content: center; padding: 10px 0 6px; }
+    .modal-handle-bar div { width: 40px; height: 4px; background: #ddd; border-radius: 2px; }
+    .modal-header { padding: 4px 20px 14px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #f0f0f0; }
+    .modal-header h2 { font-size: 1.05rem; font-weight: 700; color: #222; }
+    .modal-close { background: #f1f1f1; border: none; font-size: 1rem; cursor: pointer; color: #666; width: 30px; height: 30px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+
+    .modal-body { padding: 18px 20px; }
+    .form-group { margin-bottom: 16px; }
+    .form-group label { display: block; font-size: 0.82rem; font-weight: 700; color: #555; margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.03em; }
+    .form-group input, .form-group select, .form-group textarea {
+      width: 100%; padding: 11px 14px; border: 1.5px solid #e8e8e8; border-radius: 10px;
+      font-size: 0.95rem; outline: none; transition: border-color 0.2s; font-family: inherit; background: #fafafa;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--blue); background: white; }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+
+    .stars { display: flex; flex-direction: row-reverse; justify-content: flex-end; gap: 4px; }
+    .stars input { display: none; }
+    .stars label { font-size: 1.8rem; cursor: pointer; color: #e0e0e0; transition: color 0.1s; }
+    .stars input:checked ~ label { color: #f4b400; }
+    .stars label:hover, .stars label:hover ~ label { color: #f4b400; }
+
+    .checkbox-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .checkbox-group label { display: flex; align-items: center; gap: 5px; background: #f4f4f4; padding: 7px 12px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; font-weight: 500; color: #444; border: 2px solid transparent; transition: all 0.15s; }
+    .checkbox-group input[type=checkbox] { display: none; }
+    .checkbox-group label:has(input:checked) { background: #e8f0fe; color: var(--blue); border-color: var(--blue); }
+
+    .coords-display { font-size: 0.8rem; color: #999; margin-bottom: 14px; padding: 8px 12px; background: #f8f8f8; border-radius: 8px; }
+
+    .modal-footer { padding: 12px 20px 16px; border-top: 1px solid #f0f0f0; display: flex; gap: 10px; }
+    .btn { padding: 12px 20px; border-radius: 12px; border: none; cursor: pointer; font-size: 0.92rem; font-weight: 700; transition: all 0.15s; }
+    .btn:active { transform: scale(0.97); }
+    .btn-primary { background: var(--blue); color: white; flex: 1; }
+    .btn-secondary { background: #f1f3f4; color: #333; }
+    .btn-danger { background: #fdecea; color: var(--red); margin-right: auto; }
+
+    /* ===================== トースト ===================== */
+    #toast {
+      position: fixed;
+      bottom: calc(var(--sheet-peek) + 16px);
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1a1a1a;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 22px;
+      font-size: 0.88rem;
+      font-weight: 600;
+      z-index: 2000;
+      opacity: 0;
+      transition: opacity 0.25s;
+      pointer-events: none;
+      white-space: nowrap;
+    }
+    #toast.show { opacity: 1; }
+
+    .poi-register-popup { padding: 6px 2px; text-align: center; }
+    .poi-register-popup .poi-label { font-size: 0.82rem; color: #666; margin-bottom: 8px; }
+    .poi-register-btn {
+      background: #1a73e8; color: white; border: none; border-radius: 10px;
+      padding: 9px 18px; font-size: 0.9rem; cursor: pointer; font-weight: 700;
+      white-space: nowrap;
+    }
+    .poi-register-btn:active { opacity: 0.85; }
+
+    /* 文字数カウンター */
+    .char-counter { font-size: 0.75rem; color: #aaa; text-align: right; margin-top: 3px; }
+    .char-counter.warn { color: #e37400; }
+    .char-counter.over  { color: #ea4335; font-weight: 700; }
+
+    /* 通報ボタン */
+    .card-report-btn {
+      position: absolute; top: 8px; right: 56px;
+      background: none; border: none; font-size: 0.75rem; color: #ccc;
+      cursor: pointer; padding: 4px 6px; border-radius: 6px;
+      transition: color 0.15s;
+    }
+    .card-report-btn:active { color: #ea4335; }
+    .toilet-card { position: relative; }
+
+    /* ローディング画面 */
+    #splash {
+      position: fixed; inset: 0; z-index: 10000;
+      background: #1a73e8;
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 0;
+      transition: opacity 0.6s ease, visibility 0.6s ease;
+    }
+    #splash.hidden { opacity: 0; visibility: hidden; }
+
+    .splash-scene {
+      margin-bottom: 28px;
+      filter: drop-shadow(0 4px 18px rgba(0,0,0,0.22));
+    }
+    .splash-title {
+      font-size: 1.6rem; font-weight: 800; color: white;
+      letter-spacing: 0.04em; margin-bottom: 10px;
+    }
+    .splash-subtitle {
+      font-size: 0.9rem; color: rgba(255,255,255,0.75);
+      letter-spacing: 0.06em;
+      animation: blink-text 1.4s ease-in-out infinite;
+    }
+    @keyframes blink-text {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.4; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ローディング画面 -->
+<div id="splash">
+  <div class="splash-scene">
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 0 330 115" width="300" height="105">
+
+      <!-- 地面ライン -->
+      <line x1="-30" y1="102" x2="300" y2="102" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
+
+      <!-- ===== しょんべん小僧（ゆっくりトイレへ近づく・1回だけ） ===== -->
+      <g>
+        <!-- 画面左端（-30）からトイレ直前（148）まで2秒で1回だけ移動、最後の位置で静止 -->
+        <animateTransform attributeName="transform" type="translate"
+          values="-30,0; 148,0"
+          keyTimes="0; 1"
+          calcMode="spline"
+          keySplines="0.4,0,0.15,1"
+          dur="2s" repeatCount="1" fill="freeze"/>
+
+        <!-- ── 頭（大きくて丸い、幼児特有の大頭） ── -->
+        <circle cx="22" cy="19" r="17" fill="white"/>
+
+        <!-- 髪の毛（ぴょんと一本） -->
+        <path d="M22 2 Q24 -3 26 1" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"/>
+
+        <!-- 目（丸くてつぶらな瞳） -->
+        <circle cx="30" cy="16" r="3.5" fill="#1a73e8"/>
+        <circle cx="31.2" cy="14.8" r="1.3" fill="white"/>
+
+        <!-- 眉（ハの字、困り顔） -->
+        <path d="M25 9 Q28 7 31 9" fill="none" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
+
+        <!-- 口（小さくあいたO、必死） -->
+        <circle cx="29" cy="25" r="2.5" fill="#1a73e8"/>
+
+        <!-- ほっぺの赤み -->
+        <ellipse cx="34" cy="21" rx="4" ry="2.5" fill="rgba(255,150,150,0.35)"/>
+
+        <!-- 汗しずく -->
+        <path d="M40 6 Q42 3 44 6 Q44 9.5 42 9.5 Q40 9.5 40 6" fill="#8ab4f8"/>
+
+        <!-- ── 体（球形のぷっくりお腹、しょんべん小僧らしい丸み） ── -->
+        <circle cx="22" cy="55" r="15" fill="white"/>
+
+        <!-- おへそ -->
+        <circle cx="22" cy="58" r="2.2" fill="#d0e4ff"/>
+
+        <!-- ── 短くてぷにぷにの腕 ── -->
+        <!-- 左腕（後ろへ） -->
+        <path d="M10 47 Q4 53 2 60" fill="none" stroke="white" stroke-width="6" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate"
+            values="-22,10,47; 22,10,47; -22,10,47" dur="0.34s" repeatCount="indefinite"/>
+        </path>
+        <!-- 右腕（前へ） -->
+        <path d="M33 47 Q39 53 41 60" fill="none" stroke="white" stroke-width="6" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate"
+            values="22,33,47; -22,33,47; 22,33,47" dur="0.34s" repeatCount="indefinite"/>
+        </path>
+
+        <!-- ── 短くてぷにぷにの脚 ── -->
+        <!-- 左脚 -->
+        <path d="M16 69 Q11 80 10 91" fill="none" stroke="white" stroke-width="7" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate"
+            values="-28,16,69; 28,16,69; -28,16,69" dur="0.34s" repeatCount="indefinite"/>
+        </path>
+        <!-- 右脚 -->
+        <path d="M28 69 Q33 80 34 91" fill="none" stroke="white" stroke-width="7" stroke-linecap="round">
+          <animateTransform attributeName="transform" type="rotate"
+            values="28,28,69; -28,28,69; 28,28,69" dur="0.34s" repeatCount="indefinite"/>
+        </path>
+      </g>
+
+      <!-- ===== トイレ便器（右端・固定） ===== -->
+      <g transform="translate(205, 7)">
+        <!-- タンク蓋 -->
+        <rect x="3" y="0" width="56" height="9" rx="4.5" fill="white"/>
+        <!-- タンク本体 -->
+        <rect x="7" y="9" width="48" height="27" rx="6" fill="white"/>
+        <!-- フラッシュボタン -->
+        <rect x="19" y="15" width="22" height="9" rx="4.5" fill="#c5dafc"/>
+        <!-- タンク→便器ネック -->
+        <path d="M10 36 L52 36 L56 46 L6 46 Z" fill="white"/>
+        <!-- 便座（外リング） -->
+        <ellipse cx="31" cy="67" rx="29" ry="14.5" fill="white"/>
+        <!-- 水面（青） -->
+        <ellipse cx="31" cy="68" rx="22" ry="11" fill="#5b9cf6"/>
+        <!-- 水面ツヤ -->
+        <ellipse cx="24" cy="64" rx="7.5" ry="2.8" fill="white" opacity="0.28"/>
+        <!-- ベース上 -->
+        <rect x="14" y="79" width="34" height="8" rx="4" fill="white"/>
+        <!-- ベース下（床面） -->
+        <rect x="7" y="87" width="48" height="7" rx="3.5" fill="white"/>
+      </g>
+
+    </svg>
+  </div>
+  <div class="splash-title">Toilradar</div>
+  <div class="splash-subtitle">トイレを探しています...</div>
+</div>
+
+<div id="map-container"></div>
+
+<!-- ===================== フローティングUI ===================== -->
+<div id="top-overlay">
+  <div id="search-bar">
+    <span class="app-title">WC</span>
+    <svg class="si" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#aaa" stroke-width="2.5" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <input type="text" id="search-input" placeholder="トイレを検索...">
+    <button class="clear-btn" id="clear-search" onclick="clearSearch()">×</button>
+  </div>
+  <div id="filter-chips">
+    <button class="chip active" onclick="setTypeFilter(this,'all')">すべて</button>
+    <button class="chip" onclick="setTypeFilter(this,'男女共用')"><span class="dot" style="background:#1a73e8"></span>男女共用</button>
+    <button class="chip" onclick="setTypeFilter(this,'男女別')"><span class="dot" style="background:#34a853"></span>男女別</button>
+    <button class="chip" onclick="setTypeFilter(this,'多目的')"><span class="dot" style="background:#e37400"></span>多目的</button>
+    <button class="chip" onclick="setRatingFilter(this,4)">★ 4以上</button>
+    <button class="chip" onclick="setRatingFilter(this,3)">★ 3以上</button>
+    <button class="chip" onclick="toggleAmenityFilter(this,'washlet')">ウォシュレット</button>
+    <button class="chip" onclick="toggleAmenityFilter(this,'accessible')">車椅子対応</button>
+    <button class="chip" onclick="toggleAmenityFilter(this,'babyChange')">おむつ替え</button>
+    <button class="chip" onclick="toggleAmenityFilter(this,'h24')">24時間</button>
+  </div>
+</div>
+
+<button id="search-area-btn" onclick="searchInArea()">この範囲で検索</button>
+
+<div id="fab-group">
+  <button class="fab" id="fab-locate" onclick="goToCurrentLocation()"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/><circle cx="12" cy="12" r="8" stroke-dasharray="2 2"/></svg></button>
+  <button class="fab" id="fab-add" onclick="openAddModal(null)">＋</button>
+</div>
+
+<!-- ===================== ボトムシート ===================== -->
+<div id="bottom-sheet" class="snap-peek">
+  <div id="sheet-header">
+    <div id="sheet-handle"></div>
+    <div id="sheet-title-row">
+      <div id="sheet-count"><span id="sheet-count-num">0</span>件のトイレ</div>
+      <div id="sync-indicator">
+        <div id="sync-dot"></div>
+        <span id="sync-label">接続中...</span>
+      </div>
+    </div>
+  </div>
+  <div id="sheet-list">
+    <div id="loading-state">
+      <div class="loading-spinner"></div>
+      <div style="color:#aaa;font-size:0.9rem">読み込み中...</div>
+    </div>
+    <div id="empty-state">
+      <div class="ei"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4h10l1 8H6L7 4z"/><path d="M6 12c0 3.3 2.7 6 6 6s6-2.7 6-6"/><line x1="12" y1="18" x2="12" y2="21"/><line x1="9" y1="21" x2="15" y2="21"/></svg></div>
+      <div class="et">この付近にトイレがありません</div>
+      <div class="es">「＋」ボタンで追加しましょう</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== 追加/編集モーダル ===================== -->
+<div class="modal-overlay" id="toilet-modal">
+  <div class="modal">
+    <div class="modal-handle-bar"><div></div></div>
+    <div class="modal-header">
+      <h2 id="modal-title">トイレを追加</h2>
+      <button class="modal-close" onclick="closeModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div id="modal-coords" class="coords-display"></div>
+      <div class="form-group" id="place-search-group">
+        <label>店舗・場所を検索</label>
+        <input type="text" id="f-place-search" placeholder="例: スターバックス 渋谷" autocomplete="off">
+      </div>
+      <div class="form-group">
+        <label>名前・場所名 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="f-name" placeholder="例: ○○公園 公衆トイレ" maxlength="50" oninput="updateCounter('f-name',50)">
+        <div class="char-counter" id="counter-f-name">0 / 50</div>
+      </div>
+      <div class="form-group">
+        <label>種別</label>
+        <select id="f-type">
+          <option value="男女共用">男女共用</option>
+          <option value="男女別">男女別</option>
+          <option value="多目的">多目的</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>利用条件</label>
+        <select id="f-access">
+          <option value="誰でも利用可">誰でも利用可</option>
+          <option value="店舗利用者のみ">店舗利用者のみ</option>
+          <option value="施設利用者のみ">施設利用者のみ</option>
+          <option value="会員・宿泊者のみ">会員・宿泊者のみ</option>
+          <option value="購入者のみ">購入者のみ</option>
+          <option value="不明">不明</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>清潔さ</label>
+        <div class="stars">
+          <input type="radio" name="f-rating" id="r5" value="5"><label for="r5">★</label>
+          <input type="radio" name="f-rating" id="r4" value="4"><label for="r4">★</label>
+          <input type="radio" name="f-rating" id="r3" value="3"><label for="r3">★</label>
+          <input type="radio" name="f-rating" id="r2" value="2"><label for="r2">★</label>
+          <input type="radio" name="f-rating" id="r1" value="1"><label for="r1">★</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>設備</label>
+        <div class="checkbox-group">
+          <label><input type="checkbox" id="f-washlet">ウォシュレット</label>
+          <label><input type="checkbox" id="f-accessible">車椅子対応</label>
+          <label><input type="checkbox" id="f-babyChange">おむつ替え</label>
+          <label><input type="checkbox" id="f-24h">24時間利用可</label>
+          <label><input type="checkbox" id="f-paid">有料</label>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>メモ</label>
+        <textarea id="f-notes" placeholder="特記事項など（任意）" maxlength="200" oninput="updateCounter('f-notes',200)"></textarea>
+        <div class="char-counter" id="counter-f-notes">0 / 200</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-danger" id="btn-delete" style="display:none" onclick="deleteToilet()">削除</button>
+      <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-primary" onclick="saveToilet()">保存</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<!-- 利用規約同意ダイアログ -->
+<div id="terms-overlay" style="
+  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
+  z-index:9999; align-items:center; justify-content:center; padding:20px;
+">
+  <div style="
+    background:#fff; border-radius:20px; padding:28px 24px; max-width:380px;
+    width:100%; box-shadow:0 8px 40px rgba(0,0,0,0.3);
+  ">
+    <div style="text-align:center; font-size:2.2rem; margin-bottom:8px; color:#1a73e8; font-weight:900">WC</div>
+    <h2 style="text-align:center; font-size:1.15rem; margin-bottom:16px; color:#1a1a1a">Toilradar をご利用の前に</h2>
+    <p style="font-size:0.85rem; color:#444; line-height:1.75; margin-bottom:16px">
+      本アプリはトイレの場所・清潔さ・設備情報を共有するサービスです。<br>
+      以下の行為は<strong>利用規約違反</strong>であり、発見した場合は通報・対応します。
+    </p>
+    <ul style="font-size:0.82rem; color:#e53935; line-height:2; padding-left:1.2em; margin-bottom:20px">
+      <li>性行為・わいせつ行為を目的とした利用</li>
+      <li>出会い・待ち合わせ目的の投稿</li>
+      <li>盗撮・のぞきに関連する情報の投稿</li>
+      <li>誹謗中傷・差別的な表現の投稿</li>
+    </ul>
+    <p style="font-size:0.78rem; color:#888; margin-bottom:20px; line-height:1.6">
+      上記に同意し、トイレ情報の共有のみを目的として利用します。
+    </p>
+    <button id="terms-agree-btn" style="
+      width:100%; background:#1a73e8; color:white; border:none;
+      border-radius:12px; padding:14px; font-size:1rem; font-weight:700;
+      cursor:pointer;
+    ">同意して始める</button>
+    <button onclick="window.location.href='about:blank'" style="
+      width:100%; background:none; border:none; color:#aaa;
+      font-size:0.85rem; padding:12px; cursor:pointer; margin-top:4px;
+    ">同意しない（閉じる）</button>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// モデレーション
+// ============================================================
+const NG_WORDS = [
+  // 誹謗中傷
+  '死ね','死んで','氏ね','殺す','殺せ','ころす',
+  'バカ','ばか','馬鹿','アホ','あほ','阿呆',
+  'ブス','ぶす','デブ','でぶ','ハゲ','はげ',
+  'うざい','ウザい','キモい','きもい','キモ',
+  'ゴミ','ごみ','カス','かす','クズ','くず',
+  'チョン','チャンコロ',
+  'fuck','shit','bitch','asshole','cunt','nigger',
+  // 性的・出会い目的の利用防止
+  '出会い','エッチ','セックス','やりたい','やらせて',
+  'ナンパ','援助交際','援交','パパ活','ママ活',
+  'セフレ','不倫','浮気','変態','露出',
+  'のぞき','盗撮','痴漢','わいせつ',
+  '待ち合わせ','会いたい','連絡して','LINE教えて','連絡先',
+  'sex','xxx','porn','nude','hookup',
+];
+
+function containsBadWord(text) {
+  const lower = text.toLowerCase();
+  return NG_WORDS.some(w => lower.includes(w.toLowerCase()));
+}
+
+// 10分間に最大5件の投稿制限
+function checkRateLimit() {
+  const KEY = 'toilradar_sub';
+  const WINDOW = 10 * 60 * 1000;
+  const MAX = 5;
+  let history = JSON.parse(localStorage.getItem(KEY) || '[]');
+  history = history.filter(t => Date.now() - t < WINDOW);
+  if (history.length >= MAX) return false;
+  history.push(Date.now());
+  localStorage.setItem(KEY, JSON.stringify(history));
+  return true;
+}
+
+function updateCounter(fieldId, max) {
+  const len = document.getElementById(fieldId).value.length;
+  const el = document.getElementById('counter-' + fieldId);
+  if (!el) return;
+  el.textContent = len + ' / ' + max;
+  el.className = 'char-counter' + (len >= max ? ' over' : len >= max * 0.8 ? ' warn' : '');
+}
+
+async function reportToilet(id, e) {
+  e.stopPropagation();
+  if (!confirm('この投稿を通報しますか？\n確認後、スタッフが対応します。')) return;
+  if (!db) { showToast('接続エラー'); return; }
+  try {
+    await db.collection('reports').add({
+      toiletId: id,
+      reportedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      ua: navigator.userAgent.slice(0, 100),
+    });
+    showToast('通報しました。ご協力ありがとうございます 🙏');
+  } catch { showToast('通報に失敗しました'); }
+}
+
+// ============================================================
+// 状態管理（最初に宣言）
+// ============================================================
+let map = null, poiInfoWindow = null;
+let toilets = [];
+let markersMap = {}, editingId = null, pendingLatLng = null, selectedId = null;
+let filterType = 'all', filterRating = 0, filterAmenities = new Set();
+let searchQuery = '', searchBounds = null;
+let mapMoved = false, areaTimer;
+
+const TYPE_COLORS = { '男女共用':'#1a73e8', '男女別':'#34a853', '多目的':'#e37400', 'その他':'#ea4335' };
+const TYPE_BG     = { '男女共用':'#e8f0fe', '男女別':'#e6f4ea', '多目的':'#fef3e0', 'その他':'#fce8e6' };
+
+// ============================================================
+// Firebase 初期化（try/catchでエラーを隔離）
+// ============================================================
+const FB_CONFIG = {
+  apiKey: "AIzaSyA6ByUXn5hYbFnF8qy4g2XerPsSAwZUPb8",
+  authDomain: "wanttoilet.firebaseapp.com",
+  projectId: "wanttoilet",
+  storageBucket: "wanttoilet.firebasestorage.app",
+  messagingSenderId: "995202029830",
+  appId: "1:995202029830:web:70b924a642d14425c82687"
+};
+
+let db = null, toiletsRef = null;
+try {
+  firebase.initializeApp(FB_CONFIG);
+  db = firebase.firestore();
+  toiletsRef = db.collection('toilets');
+} catch(e) {
+  console.error('Firebase初期化エラー:', e);
+}
+
+// ============================================================
+// マップ初期化（Google Maps コールバック）
+// ============================================================
+window.initMap = function() {
+  map = new google.maps.Map(document.getElementById('map-container'), {
+    center: { lat: 35.6812, lng: 139.7671 },
+    zoom: 14,
+    disableDefaultUI: true,
+    zoomControl: true,
+    zoomControlOptions: { position: google.maps.ControlPosition.LEFT_BOTTOM },
+    gestureHandling: 'greedy',
+  });
+
+  poiInfoWindow = new google.maps.InfoWindow();
+
+  map.addListener('click', e => {
+    hideSearchAreaBtn();
+    poiInfoWindow.close();
+
+    if (e.placeId) {
+      // 店舗・施設タップ時 → 登録ボタンのポップアップを表示
+      e.stop();
+      poiInfoWindow.setPosition(e.latLng);
+      poiInfoWindow.setContent(
+        '<div class="poi-register-popup">' +
+        '<div class="poi-label">この場所のトイレ情報を登録</div>' +
+        '<button class="poi-register-btn" id="poi-reg-btn">＋ トイレを登録</button>' +
+        '</div>'
+      );
+      poiInfoWindow.open(map);
+      google.maps.event.addListenerOnce(poiInfoWindow, 'domready', () => {
+        const btn = document.getElementById('poi-reg-btn');
+        if (btn) btn.addEventListener('click', () => {
+          poiInfoWindow.close();
+          openAddModal({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+        });
+      });
+    } else {
+      openAddModal({ lat: e.latLng.lat(), lng: e.latLng.lng() });
+    }
+  });
+
+  map.addListener('dragstart', () => { mapMoved = true; });
+  map.addListener('idle', () => {
+    if (mapMoved) { clearTimeout(areaTimer); areaTimer = setTimeout(showSearchAreaBtn, 600); }
+  });
+
+  // Places Autocomplete（店舗検索）
+  if (google.maps.places) {
+    const ac = new google.maps.places.Autocomplete(
+      document.getElementById('f-place-search'),
+      { fields: ['name', 'geometry'], language: 'ja' }
+    );
+    ac.bindTo('bounds', map);
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      if (!place.geometry) return;
+      if (place.name) document.getElementById('f-name').value = place.name;
+      pendingLatLng = { lat: place.geometry.location.lat(), lng: place.geometry.location.lng() };
+      document.getElementById('modal-coords').textContent =
+        `${pendingLatLng.lat.toFixed(5)}, ${pendingLatLng.lng.toFixed(5)}`;
+      if (place.geometry.viewport) map.fitBounds(place.geometry.viewport);
+      else { map.panTo(place.geometry.location); map.setZoom(17); }
+    });
+  }
+
+  startFirestore();
+  goToCurrentLocation();
+  setSheetSnap('peek', false);
+};
+
+// ============================================================
+// Firestore リアルタイム同期
+// ============================================================
+const splashStart = Date.now();
+// Maps/Firestoreが応答しない場合でも最大6秒で強制終了
+setTimeout(() => hideSplash(), 6000);
+
+function hideSplash() {
+  const splash = document.getElementById('splash');
+  if (!splash || splash.classList.contains('hidden')) return;
+  const wait = Math.max(0, 2000 - (Date.now() - splashStart));
+  setTimeout(() => {
+    splash.classList.add('hidden');
+    setTimeout(() => splash.remove(), 700);
+  }, wait);
+}
+
+function startFirestore() {
+  // 最大5秒でスプラッシュを強制終了（2秒保証込み）
+  setTimeout(hideSplash, 5000);
+
+  if (!toiletsRef) {
+    setSyncStatus('offline');
+    document.getElementById('loading-state').style.display = 'none';
+    document.getElementById('empty-state').style.display = 'flex';
+    showToast('Firebase未接続');
+    hideSplash();
+    return;
+  }
+  setSyncStatus('loading');
+  toiletsRef.orderBy('addedAt', 'desc').onSnapshot(
+    snap => {
+      toilets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      setSyncStatus('online');
+      document.getElementById('loading-state').style.display = 'none';
+      refreshAll();
+      hideSplash();
+    },
+    err => {
+      setSyncStatus('offline');
+      showToast('接続エラー: ' + err.message);
+      hideSplash();
+    }
+  );
+}
+
+function setSyncStatus(s) {
+  const dot = document.getElementById('sync-dot');
+  const lbl = document.getElementById('sync-label');
+  const colors = { online: '#34a853', loading: '#f4b400', offline: '#ea4335' };
+  const labels = { online: '同期済み', loading: '同期中...', offline: 'オフライン' };
+  dot.style.background = colors[s];
+  dot.style.animation = s === 'loading' ? 'pulse 1s infinite' : '';
+  lbl.textContent = labels[s];
+}
+
+// ============================================================
+// フィルター・検索
+// ============================================================
+function getFiltered() {
+  return toilets.filter(t => {
+    if (filterType !== 'all' && t.type !== filterType) return false;
+    if (filterRating > 0 && (t.rating || 0) < filterRating) return false;
+    for (const a of filterAmenities) { if (!t[a]) return false; }
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      if (!(t.name||'').toLowerCase().includes(q) && !(t.notes||'').toLowerCase().includes(q)) return false;
+    }
+    if (searchBounds && !searchBounds.contains({ lat: t.lat, lng: t.lng })) return false;
+    return true;
+  });
+}
+
+function setTypeFilter(el, type) {
+  filterType = type; filterRating = 0;
+  document.querySelectorAll('#filter-chips .chip[onclick^="setTypeFilter"]').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('#filter-chips .chip[onclick^="setRatingFilter"]').forEach(b => b.classList.remove('active'));
+  el.classList.add('active'); searchBounds = null; refreshAll();
+}
+function setRatingFilter(el, rating) {
+  const was = el.classList.contains('active');
+  document.querySelectorAll('#filter-chips .chip[onclick^="setRatingFilter"]').forEach(b => b.classList.remove('active'));
+  filterRating = was ? 0 : rating;
+  if (!was) el.classList.add('active');
+  searchBounds = null; refreshAll();
+}
+function toggleAmenityFilter(el, key) {
+  filterAmenities.has(key) ? (filterAmenities.delete(key), el.classList.remove('active')) : (filterAmenities.add(key), el.classList.add('active'));
+  searchBounds = null; refreshAll();
+}
+document.getElementById('search-input').addEventListener('input', e => {
+  searchQuery = e.target.value.trim();
+  document.getElementById('clear-search').classList.toggle('show', !!searchQuery);
+  searchBounds = null; refreshAll();
+});
+function clearSearch() {
+  document.getElementById('search-input').value = ''; searchQuery = '';
+  document.getElementById('clear-search').classList.remove('show'); refreshAll();
+}
+function showSearchAreaBtn() { document.getElementById('search-area-btn').classList.add('show'); }
+function hideSearchAreaBtn() { mapMoved = false; document.getElementById('search-area-btn').classList.remove('show'); }
+function searchInArea() { searchBounds = map.getBounds(); hideSearchAreaBtn(); refreshAll(); }
+
+// ============================================================
+// マーカー & カード
+// ============================================================
+function refreshAll() { renderMarkers(); renderCards(); }
+
+function makeIcon(type, selected) {
+  const color = TYPE_COLORS[type] || '#1a73e8';
+  const scale = selected ? 1.3 : 1;
+  const w = Math.round(54 * scale), h = Math.round(28 * scale);
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}">
+    <rect rx="${h/2}" width="${w}" height="${h}" fill="${color}" stroke="white" stroke-width="${selected ? 3 : 2}"/>
+    <text x="${w/2}" y="${Math.round(h*0.72)}" text-anchor="middle" font-size="${Math.round(13*scale)}" fill="white" font-family="-apple-system,Helvetica,sans-serif" font-weight="bold">WC</text>
+  </svg>`;
+  return {
+    url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+    scaledSize: new google.maps.Size(w, h),
+    anchor: new google.maps.Point(w / 2, h),
+  };
+}
+
+function renderMarkers() {
+  if (!map) return;
+  Object.values(markersMap).forEach(m => m.setMap(null));
+  markersMap = {};
+  getFiltered().forEach(t => {
+    const marker = new google.maps.Marker({
+      position: { lat: t.lat, lng: t.lng },
+      map,
+      icon: makeIcon(t.type, t.id === selectedId),
+      title: t.name,
+      zIndex: t.id === selectedId ? 100 : 1,
+    });
+    marker.addListener('click', () => selectToilet(t.id));
+    markersMap[t.id] = marker;
+  });
+}
+
+function renderCards() {
+  const list    = document.getElementById('sheet-list');
+  const empty   = document.getElementById('empty-state');
+  const filtered = getFiltered();
+  document.getElementById('sheet-count-num').textContent = filtered.length;
+  Array.from(list.children).forEach(c => { if (!['empty-state','loading-state'].includes(c.id)) c.remove(); });
+  if (filtered.length === 0) { empty.style.display = 'flex'; return; }
+  empty.style.display = 'none';
+  filtered.forEach(t => list.appendChild(buildCard(t)));
+}
+
+function buildCard(t) {
+  const color   = TYPE_COLORS[t.type] || '#1a73e8';
+  const bgColor = TYPE_BG[t.type] || '#e8f0fe';
+  const stars   = t.rating
+    ? '★'.repeat(t.rating) + `<span style="color:#ddd">${'★'.repeat(5-t.rating)}</span>`
+    : '<span class="nr">未評価</span>';
+  const amenities = [t.washlet&&'ウォシュレット', t.accessible&&'♿ 車椅子対応', t.babyChange&&'おむつ替え', t.h24&&'24時間', t.paid&&'有料'].filter(Boolean);
+
+  const div = document.createElement('div');
+  div.className = 'toilet-card' + (t.id === selectedId ? ' selected' : '');
+  div.dataset.id = t.id;
+  div.innerHTML = `
+    <div class="card-icon" style="background:${bgColor};font-size:0.7rem;font-weight:900;color:${color}">WC</div>
+    <div class="card-body">
+      <div class="card-name">${esc(t.name)}</div>
+      <div class="card-meta">
+        <span class="type-badge" style="background:${color}">${esc(t.type)}</span>
+        <span class="card-rating">${stars}</span>
+      </div>
+      ${t.access && t.access !== '誰でも利用可' ? `<div style="margin-top:4px"><span class="amenity-tag" style="background:#fff3e0;color:#e37400">${esc(t.access)}</span></div>` : ''}
+      ${amenities.length ? `<div class="card-amenities">${amenities.map(a=>`<span class="amenity-tag">${a}</span>`).join('')}</div>` : ''}
+      ${t.notes ? `<div class="card-notes">${esc(t.notes)}</div>` : ''}
+    </div>
+    <button class="card-report-btn" onclick="reportToilet('${t.id}',event)" title="通報">通報</button>
+    <button class="card-edit-btn" onclick="event.stopPropagation();openEditModal('${t.id}')">編集</button>`;
+
+  div.addEventListener('click', () => {
+    selectToilet(t.id);
+    map.panTo({ lat: t.lat, lng: t.lng });
+    if (map.getZoom() < 16) map.setZoom(16);
+    setSheetSnap('peek');
+  });
+  return div;
+}
+
+function selectToilet(id) {
+  selectedId = id;
+  getFiltered().forEach(t => {
+    const m = markersMap[t.id];
+    if (!m) return;
+    m.setIcon(makeIcon(t.type, t.id === id));
+    m.setZIndex(t.id === id ? 100 : 1);
+  });
+  document.querySelectorAll('.toilet-card').forEach(c => c.classList.toggle('selected', c.dataset.id === id));
+  const card = document.querySelector(`.toilet-card[data-id="${id}"]`);
+  if (card) {
+    if (currentSnap === 'peek') setSheetSnap('half');
+    setTimeout(() => card.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 350);
+  }
+}
+
+// ============================================================
+// ボトムシート ドラッグ
+// ============================================================
+const sheet       = document.getElementById('bottom-sheet');
+const sheetHeader = document.getElementById('sheet-header');
+let dragStartY = 0, dragStartT = 0, isDragging = false, currentSnap = 'peek';
+
+function getTranslateY(el) { return new DOMMatrix(getComputedStyle(el).transform).m42; }
+
+function setSheetSnap(snap, animate = true) {
+  currentSnap = snap;
+  if (!animate) sheet.classList.add('no-tr');
+  sheet.classList.remove('snap-peek','snap-half','snap-full');
+  sheet.classList.add('snap-' + snap);
+  if (!animate) requestAnimationFrame(() => sheet.classList.remove('no-tr'));
+  const h = { peek: 110, half: window.innerHeight*0.5, full: window.innerHeight*0.88 };
+  document.getElementById('fab-group').style.bottom = (h[snap] + 16) + 'px';
+}
+
+function onDS(e) { dragStartY=(e.touches?.[0]||e).clientY; dragStartT=getTranslateY(sheet); isDragging=true; sheet.classList.add('no-tr'); }
+function onDM(e) {
+  if (!isDragging) return; e.preventDefault();
+  const dy=(e.touches?.[0]||e).clientY-dragStartY;
+  const t=Math.max(Math.min(dragStartT+dy, window.innerHeight-110), window.innerHeight*0.06);
+  sheet.style.transform=`translateY(${t}px)`;
+}
+function onDE(e) {
+  if (!isDragging) return; isDragging=false; sheet.classList.remove('no-tr'); sheet.style.transform='';
+  const dy=(e.changedTouches?.[0]||e).clientY-dragStartY;
+  if (dy<-60) setSheetSnap(currentSnap==='peek'?'half':'full');
+  else if (dy>60) setSheetSnap(currentSnap==='full'?'half':'peek');
+  else setSheetSnap(currentSnap);
+}
+
+sheetHeader.addEventListener('touchstart', onDS, {passive:false});
+sheetHeader.addEventListener('touchmove',  onDM, {passive:false});
+sheetHeader.addEventListener('touchend',   onDE);
+sheetHeader.addEventListener('mousedown',  onDS);
+window.addEventListener('mousemove', onDM);
+window.addEventListener('mouseup',   onDE);
+sheetHeader.addEventListener('click', () => { if (Math.abs(getTranslateY(sheet)-dragStartT)<5 && currentSnap==='peek') setSheetSnap('half'); });
+
+// ============================================================
+// モーダル
+// ============================================================
+function openAddModal(latlng) {
+  pendingLatLng = latlng; editingId = null;
+  document.getElementById('modal-title').textContent = 'トイレを追加';
+  document.getElementById('btn-delete').style.display = 'none';
+  clearForm();
+  document.getElementById('modal-coords').textContent = latlng
+    ? `${latlng.lat.toFixed(5)}, ${latlng.lng.toFixed(5)}`
+    : '地図をタップして場所を選んでください';
+  document.getElementById('toilet-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('f-name').focus(), 150);
+}
+
+function openEditModal(id) {
+  const t = toilets.find(x => x.id===id); if (!t) return;
+  editingId = id; pendingLatLng = { lat: t.lat, lng: t.lng };
+  document.getElementById('modal-title').textContent = 'トイレを編集';
+  document.getElementById('btn-delete').style.display = 'block';
+  document.getElementById('modal-coords').textContent = `${t.lat.toFixed(5)}, ${t.lng.toFixed(5)}`;
+  document.getElementById('f-name').value = t.name||'';
+  document.getElementById('f-type').value = t.type||'男女共用';
+  document.getElementById('f-access').value = t.access||'誰でも利用可';
+  document.querySelectorAll('input[name="f-rating"]').forEach(r=>r.checked=false);
+  if (t.rating) { const rb=document.querySelector(`input[name="f-rating"][value="${t.rating}"]`); if(rb)rb.checked=true; }
+  document.getElementById('f-washlet').checked=!!t.washlet;
+  document.getElementById('f-accessible').checked=!!t.accessible;
+  document.getElementById('f-babyChange').checked=!!t.babyChange;
+  document.getElementById('f-24h').checked=!!t.h24;
+  document.getElementById('f-paid').checked=!!t.paid;
+  document.getElementById('f-notes').value=t.notes||'';
+  document.getElementById('toilet-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('f-name').focus(), 150);
+}
+
+function closeModal() { document.getElementById('toilet-modal').classList.remove('open'); editingId=null; pendingLatLng=null; }
+
+function clearForm() {
+  document.getElementById('f-place-search').value='';
+  document.getElementById('f-name').value=''; document.getElementById('f-type').value='男女共用';
+  document.getElementById('f-access').value='誰でも利用可';
+  document.querySelectorAll('input[name="f-rating"]').forEach(r=>r.checked=false);
+  ['f-washlet','f-accessible','f-babyChange','f-24h','f-paid'].forEach(id=>document.getElementById(id).checked=false);
+  document.getElementById('f-notes').value='';
+}
+
+async function saveToilet() {
+  const name = document.getElementById('f-name').value.trim();
+  if (!name) { showToast('名前を入力してください'); document.getElementById('f-name').focus(); return; }
+  if (!pendingLatLng) { showToast('地図をタップして場所を選んでください'); closeModal(); return; }
+  if (!toiletsRef) { showToast('Firebase未接続: 保存できません'); return; }
+
+  const notes = document.getElementById('f-notes').value.trim();
+  if (containsBadWord(name) || containsBadWord(notes)) {
+    showToast('不適切な言葉が含まれています。内容を修正してください ⚠️');
+    return;
+  }
+  if (!editingId && !checkRateLimit()) {
+    showToast('短時間に投稿が多すぎます。しばらく待ってから再試行してください');
+    return;
+  }
+
+  const ratingEl = document.querySelector('input[name="f-rating"]:checked');
+  const data = {
+    name, type: document.getElementById('f-type').value,
+    access: document.getElementById('f-access').value,
+    rating: ratingEl ? parseInt(ratingEl.value) : 0,
+    washlet: document.getElementById('f-washlet').checked,
+    accessible: document.getElementById('f-accessible').checked,
+    babyChange: document.getElementById('f-babyChange').checked,
+    h24: document.getElementById('f-24h').checked,
+    paid: document.getElementById('f-paid').checked,
+    notes: document.getElementById('f-notes').value.trim(),
+    lat: pendingLatLng.lat, lng: pendingLatLng.lng,
+  };
+
+  const btn = document.querySelector('#toilet-modal .btn-primary');
+  btn.textContent='保存中...'; btn.disabled=true;
+  try {
+    if (editingId) {
+      await toiletsRef.doc(editingId).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      showToast('更新しました ✓');
+    } else {
+      const doc = await toiletsRef.add({ ...data, addedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      selectedId = doc.id; setSheetSnap('half');
+      showToast('追加しました ✓');
+    }
+    closeModal(); searchBounds=null;
+  } catch(e) { showToast('保存失敗: '+e.message); }
+  finally { btn.textContent='保存'; btn.disabled=false; }
+}
+
+async function deleteToilet() {
+  if (!editingId||!confirm('このトイレを削除しますか？')) return;
+  try {
+    await toiletsRef.doc(editingId).delete();
+    if (selectedId===editingId) selectedId=null;
+    closeModal(); showToast('削除しました');
+  } catch(e) { showToast('削除失敗: '+e.message); }
+}
+
+// ============================================================
+// 現在地
+// ============================================================
+async function goToCurrentLocation() {
+  try {
+    let pos;
+    if (window.isNative&&window.Capacitor) {
+      const { Geolocation } = window.Capacitor.Plugins;
+      const perm = await Geolocation.requestPermissions();
+      if (perm.location==='denied') { showToast('位置情報の権限が必要です'); return; }
+      pos = (await Geolocation.getCurrentPosition({enableHighAccuracy:true})).coords;
+    } else {
+      pos = await new Promise((res,rej)=>{ if(!navigator.geolocation){rej();return;} navigator.geolocation.getCurrentPosition(r=>res(r.coords),rej); });
+    }
+    if (map) map.panTo({ lat: pos.latitude, lng: pos.longitude });
+    if (map && map.getZoom() < 15) map.setZoom(16);
+    showToast('現在地に移動しました');
+  } catch { showToast('位置情報を取得できませんでした'); }
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+let toastTimer;
+function showToast(msg) {
+  const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>el.classList.remove('show'),2500);
+}
+
+document.getElementById('toilet-modal').addEventListener('click', function(e){ if(e.target===this)closeModal(); });
+
+// 初回起動時に利用規約の同意を求める
+(function() {
+  if (!localStorage.getItem('toilradar_agreed')) {
+    const overlay = document.getElementById('terms-overlay');
+    overlay.style.display = 'flex';
+    document.getElementById('terms-agree-btn').addEventListener('click', () => {
+      localStorage.setItem('toilradar_agreed', '1');
+      overlay.style.display = 'none';
+    });
+  }
+})();
+</script>
+</body>
+</html>
