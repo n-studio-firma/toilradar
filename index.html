@@ -1466,6 +1466,10 @@ function loadProfilePage() {
         <div class="icon">🚪</div>
         <span>ログアウト</span>
       </button>
+    </div>
+    <div style="padding:0 16px 8px">
+      <div style="font-size:0.85rem;font-weight:700;color:#888;padding:8px 0 10px;border-bottom:1px solid #f0f0f0;margin-bottom:8px">登録したトイレ</div>
+      <div id="my-toilets-list"></div>
     </div>`;
 
   // Fix large avatar circle inline
@@ -1475,6 +1479,18 @@ function loadProfilePage() {
     circle.style.width = '80px';
     circle.style.height = '80px';
     circle.style.fontSize = '2rem';
+  }
+
+  // 自分が登録したトイレ一覧
+  const myList = document.getElementById('my-toilets-list');
+  if (myList) {
+    const myToilets = toilets.filter(t => t.createdBy === currentUser.uid);
+    if (myToilets.length === 0) {
+      myList.innerHTML = '<div style="text-align:center;color:#bbb;font-size:0.88rem;padding:24px 0">まだトイレを登録していません</div>';
+    } else {
+      myList.innerHTML = '';
+      myToilets.forEach(t => myList.appendChild(buildCard(t)));
+    }
   }
 }
 
