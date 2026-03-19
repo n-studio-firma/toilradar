@@ -13,6 +13,7 @@
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
   <!-- Google Maps -->
   <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAobI9Wu7ci3lfrjzdzZQWAcgk5sSA5On0&callback=initMap&language=ja&libraries=places"></script>
   <script>
@@ -37,6 +38,7 @@
       --sheet-peek: 110px;
       --sheet-half: 50vh;
       --sheet-full: 88vh;
+      --nav-height: 56px;
     }
 
     body {
@@ -105,7 +107,7 @@
     #fab-group {
       position: fixed;
       right: 14px;
-      bottom: calc(var(--sheet-peek) + 16px);
+      bottom: calc(var(--sheet-peek) + var(--nav-height) + 16px);
       display: flex;
       flex-direction: column;
       gap: 10px;
@@ -155,7 +157,8 @@
     /* ===================== ボトムシート ===================== */
     #bottom-sheet {
       position: fixed;
-      left: 0; right: 0; bottom: 0;
+      left: 0; right: 0;
+      bottom: calc(var(--nav-height) + var(--safe-bottom));
       height: var(--sheet-full);
       background: white;
       border-radius: 20px 20px 0 0;
@@ -166,7 +169,6 @@
       display: flex;
       flex-direction: column;
       touch-action: none;
-      padding-bottom: var(--safe-bottom);
     }
     #bottom-sheet.snap-peek  { transform: translateY(calc(100% - var(--sheet-peek))); }
     #bottom-sheet.snap-half  { transform: translateY(calc(100% - var(--sheet-half))); }
@@ -198,6 +200,7 @@
       display: flex;
       gap: 12px;
       align-items: flex-start;
+      position: relative;
     }
     .toilet-card:active { background: #f8f9ff; transform: scale(0.99); }
     .toilet-card.selected { border-color: var(--blue); background: #f0f6ff; box-shadow: 0 0 0 2px rgba(26,115,232,0.2); }
@@ -205,6 +208,7 @@
     .card-icon { width: 44px; height: 44px; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0; }
     .card-body { flex: 1; min-width: 0; }
     .card-name { font-size: 0.97rem; font-weight: 700; color: #1a1a1a; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .card-by { font-size: 0.75rem; color: #aaa; margin-bottom: 2px; }
     .card-meta { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; flex-wrap: wrap; }
     .type-badge { font-size: 0.72rem; font-weight: 700; padding: 2px 7px; border-radius: 10px; color: white; }
     .card-rating { font-size: 0.82rem; color: #f4b400; font-weight: 700; }
@@ -214,6 +218,11 @@
     .card-notes { font-size: 0.8rem; color: #888; margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .card-edit-btn { background: none; border: 1.5px solid #ddd; border-radius: 10px; padding: 6px 10px; font-size: 0.8rem; color: #666; cursor: pointer; flex-shrink: 0; align-self: center; }
     .card-edit-btn:active { background: #f0f0f0; }
+    .card-action-row { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+    .card-fav-btn { background: none; border: none; cursor: pointer; padding: 4px; font-size: 1.1rem; color: #ccc; transition: color 0.15s; }
+    .card-fav-btn.favorited { color: #ea4335; }
+    .card-comment-btn { background: none; border: none; cursor: pointer; padding: 4px; font-size: 1.1rem; color: #aaa; transition: color 0.15s; display: flex; align-items: center; gap: 3px; font-size: 0.78rem; }
+    .card-comment-btn:active { color: var(--blue); }
 
     #empty-state { display: none; flex-direction: column; align-items: center; padding: 40px 20px; color: #bbb; text-align: center; gap: 8px; }
     #empty-state .ei { font-size: 3rem; }
@@ -285,7 +294,7 @@
     /* ===================== トースト ===================== */
     #toast {
       position: fixed;
-      bottom: calc(var(--sheet-peek) + 16px);
+      bottom: calc(var(--sheet-peek) + var(--nav-height) + 16px);
       left: 50%;
       transform: translateX(-50%);
       background: #1a1a1a;
@@ -324,7 +333,6 @@
       transition: color 0.15s;
     }
     .card-report-btn:active { color: #ea4335; }
-    .toilet-card { position: relative; }
 
     /* ローディング画面 */
     #splash {
@@ -353,6 +361,193 @@
       0%, 100% { opacity: 1; }
       50%       { opacity: 0.4; }
     }
+
+    /* ===================== ボトムナビ ===================== */
+    #bottom-nav {
+      position: fixed;
+      bottom: 0; left: 0; right: 0;
+      height: calc(var(--nav-height) + var(--safe-bottom));
+      background: white;
+      border-top: 1px solid #e8e8e8;
+      display: flex;
+      z-index: 300;
+      padding-bottom: var(--safe-bottom);
+    }
+    .nav-btn {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #aaa;
+      font-size: 0.65rem;
+      font-weight: 600;
+      gap: 3px;
+      padding: 6px 0;
+      transition: color 0.15s;
+    }
+    .nav-btn.active { color: var(--blue); }
+    .nav-btn svg { width: 22px; height: 22px; }
+
+    /* ===================== ページオーバーレイ ===================== */
+    .page-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      bottom: calc(var(--nav-height) + var(--safe-bottom));
+      background: #f8f9fa;
+      z-index: 250;
+      display: none;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .page-overlay.active { display: flex; }
+
+    .page-header {
+      background: white;
+      padding: max(16px, var(--safe-top)) 20px 14px;
+      border-bottom: 1px solid #f0f0f0;
+      flex-shrink: 0;
+    }
+    .page-header h1 { font-size: 1.2rem; font-weight: 800; color: #1a1a1a; }
+
+    .page-content { flex: 1; overflow-y: auto; padding: 12px; -webkit-overflow-scrolling: touch; }
+    .page-content::-webkit-scrollbar { display: none; }
+
+    /* ===================== 認証オーバーレイ ===================== */
+    #auth-overlay {
+      position: fixed;
+      inset: 0;
+      background: white;
+      z-index: 9000;
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow-y: auto;
+      padding: max(40px, var(--safe-top)) 24px max(24px, var(--safe-bottom));
+    }
+    #auth-overlay.active { display: flex; }
+
+    .auth-logo { font-size: 2.2rem; font-weight: 900; color: var(--blue); margin-bottom: 6px; }
+    .auth-tagline { font-size: 0.9rem; color: #888; margin-bottom: 32px; }
+
+    .auth-tabs { display: flex; width: 100%; max-width: 360px; background: #f1f3f4; border-radius: 12px; padding: 3px; margin-bottom: 24px; }
+    .auth-tab { flex: 1; padding: 9px; border: none; background: none; border-radius: 10px; font-size: 0.9rem; font-weight: 700; color: #888; cursor: pointer; transition: all 0.2s; }
+    .auth-tab.active { background: white; color: var(--blue); box-shadow: 0 1px 4px rgba(0,0,0,0.12); }
+
+    .auth-form { width: 100%; max-width: 360px; display: none; flex-direction: column; gap: 14px; }
+    .auth-form.active { display: flex; }
+
+    .auth-input {
+      width: 100%; padding: 13px 16px; border: 1.5px solid #e8e8e8; border-radius: 12px;
+      font-size: 0.97rem; outline: none; transition: border-color 0.2s; font-family: inherit; background: #fafafa;
+    }
+    .auth-input:focus { border-color: var(--blue); background: white; }
+
+    .auth-btn {
+      width: 100%; padding: 14px; border: none; border-radius: 12px; font-size: 1rem; font-weight: 700;
+      background: var(--blue); color: white; cursor: pointer; transition: opacity 0.15s;
+    }
+    .auth-btn:active { opacity: 0.85; }
+    .auth-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .auth-error { color: var(--red); font-size: 0.85rem; background: #fdecea; padding: 10px 14px; border-radius: 10px; display: none; }
+    .auth-error.show { display: block; }
+
+    .terms-check-row { display: flex; align-items: flex-start; gap: 10px; font-size: 0.83rem; color: #555; line-height: 1.5; }
+    .terms-check-row input[type=checkbox] { width: 18px; height: 18px; flex-shrink: 0; margin-top: 1px; cursor: pointer; accent-color: var(--blue); }
+
+    /* ===================== プロフィール設定モーダル ===================== */
+    #profile-modal .modal {
+      border-radius: 20px 20px 0 0;
+    }
+    .avatar-upload-area {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .avatar-preview {
+      width: 80px; height: 80px; border-radius: 50%;
+      background: var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 2rem; font-weight: 700; color: white;
+      overflow: hidden; cursor: pointer; border: 3px solid #e8e8e8;
+    }
+    .avatar-preview img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-upload-btn { font-size: 0.83rem; color: var(--blue); background: #e8f0fe; border: none; border-radius: 8px; padding: 6px 14px; cursor: pointer; font-weight: 600; }
+
+    /* ===================== アバター丸 ===================== */
+    .avatar-circle {
+      width: 44px; height: 44px; border-radius: 50%;
+      background: var(--blue);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 1.1rem; font-weight: 700; color: white;
+      overflow: hidden; flex-shrink: 0;
+    }
+    .avatar-circle img { width: 100%; height: 100%; object-fit: cover; }
+    .avatar-circle.sm { width: 36px; height: 36px; font-size: 0.95rem; }
+    .avatar-circle.xs { width: 28px; height: 28px; font-size: 0.75rem; }
+
+    /* ===================== ランキング ===================== */
+    .rank-row {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px 14px;
+      background: white;
+      border-radius: 14px;
+      margin-bottom: 8px;
+    }
+    .rank-num { width: 28px; text-align: center; font-size: 1rem; font-weight: 900; color: #bbb; flex-shrink: 0; }
+    .rank-num.gold { color: #f4b400; }
+    .rank-num.silver { color: #9e9e9e; }
+    .rank-num.bronze { color: #c88935; }
+    .rank-info { flex: 1; min-width: 0; }
+    .rank-name { font-size: 0.95rem; font-weight: 700; color: #222; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .rank-pts { font-size: 0.82rem; color: #888; }
+    .rank-pts strong { color: var(--blue); font-size: 1rem; }
+
+    /* ===================== お気に入り ===================== */
+    .fav-empty { display: flex; flex-direction: column; align-items: center; padding: 60px 20px; gap: 12px; color: #bbb; text-align: center; }
+    .fav-empty-icon { font-size: 3rem; }
+
+    /* ===================== コメントモーダル ===================== */
+    #comments-modal .modal { border-radius: 20px 20px 0 0; max-height: 80dvh; }
+    .comment-creator-row { font-size: 0.82rem; color: #888; padding: 8px 20px; border-bottom: 1px solid #f5f5f5; }
+    .comment-list { padding: 10px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 80px; max-height: 280px; overflow-y: auto; }
+    .comment-item { display: flex; gap: 10px; align-items: flex-start; }
+    .comment-body { flex: 1; background: #f8f9fa; border-radius: 12px; padding: 10px 12px; }
+    .comment-author { font-size: 0.78rem; font-weight: 700; color: #333; margin-bottom: 3px; }
+    .comment-text { font-size: 0.88rem; color: #444; line-height: 1.5; }
+    .comment-time { font-size: 0.72rem; color: #bbb; margin-top: 4px; }
+    .comment-del-btn { background: none; border: none; color: #ccc; cursor: pointer; font-size: 0.75rem; padding: 2px 4px; border-radius: 4px; align-self: flex-start; flex-shrink: 0; margin-top: 10px; }
+    .comment-del-btn:active { color: var(--red); }
+    .comment-input-row { padding: 10px 16px; border-top: 1px solid #f0f0f0; display: flex; gap: 8px; align-items: flex-end; }
+    .comment-input-row textarea { flex: 1; border: 1.5px solid #e8e8e8; border-radius: 10px; padding: 10px 12px; font-size: 0.9rem; resize: none; outline: none; font-family: inherit; max-height: 100px; }
+    .comment-input-row textarea:focus { border-color: var(--blue); }
+    .comment-send-btn { background: var(--blue); color: white; border: none; border-radius: 10px; padding: 10px 16px; cursor: pointer; font-weight: 700; font-size: 0.88rem; white-space: nowrap; }
+    .comment-send-btn:disabled { opacity: 0.5; }
+
+    /* ===================== プロフィールページ ===================== */
+    .profile-hero { background: white; padding: 28px 20px 20px; display: flex; flex-direction: column; align-items: center; gap: 10px; border-bottom: 1px solid #f0f0f0; }
+    .profile-hero .avatar-circle { width: 80px; height: 80px; font-size: 2rem; }
+    .profile-hero-name { font-size: 1.2rem; font-weight: 800; color: #1a1a1a; }
+    .profile-hero-sub { font-size: 0.85rem; color: #888; }
+    .profile-stats { display: flex; gap: 24px; margin-top: 8px; }
+    .profile-stat { text-align: center; }
+    .profile-stat-num { font-size: 1.4rem; font-weight: 900; color: var(--blue); }
+    .profile-stat-label { font-size: 0.75rem; color: #888; }
+    .profile-actions { padding: 16px; display: flex; flex-direction: column; gap: 10px; }
+    .profile-action-btn { display: flex; align-items: center; gap: 12px; padding: 14px 16px; background: white; border: none; border-radius: 14px; font-size: 0.95rem; font-weight: 600; cursor: pointer; color: #333; width: 100%; text-align: left; }
+    .profile-action-btn .icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.1rem; }
+    .profile-action-btn.danger { color: var(--red); }
+    .profile-action-btn.danger .icon { background: #fdecea; }
+    .profile-action-btn .icon.blue { background: #e8f0fe; }
   </style>
 </head>
 <body>
@@ -361,95 +556,55 @@
 <div id="splash">
   <div class="splash-scene">
     <svg xmlns="http://www.w3.org/2000/svg" viewBox="-30 0 330 115" width="300" height="105">
-
       <!-- 地面ライン -->
       <line x1="-30" y1="102" x2="300" y2="102" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"/>
-
       <!-- ===== しょんべん小僧（ゆっくりトイレへ近づく・1回だけ） ===== -->
       <g>
-        <!-- 画面左端（-30）からトイレ直前（148）まで2秒で1回だけ移動、最後の位置で静止 -->
         <animateTransform attributeName="transform" type="translate"
           values="-30,0; 148,0"
           keyTimes="0; 1"
           calcMode="spline"
           keySplines="0.4,0,0.15,1"
           dur="2s" repeatCount="1" fill="freeze"/>
-
-        <!-- ── 頭（大きくて丸い、幼児特有の大頭） ── -->
         <circle cx="22" cy="19" r="17" fill="white"/>
-
-        <!-- 髪の毛（ぴょんと一本） -->
         <path d="M22 2 Q24 -3 26 1" fill="none" stroke="white" stroke-width="3" stroke-linecap="round"/>
-
-        <!-- 目（丸くてつぶらな瞳） -->
         <circle cx="30" cy="16" r="3.5" fill="#1a73e8"/>
         <circle cx="31.2" cy="14.8" r="1.3" fill="white"/>
-
-        <!-- 眉（ハの字、困り顔） -->
         <path d="M25 9 Q28 7 31 9" fill="none" stroke="#1a73e8" stroke-width="2" stroke-linecap="round"/>
-
-        <!-- 口（小さくあいたO、必死） -->
         <circle cx="29" cy="25" r="2.5" fill="#1a73e8"/>
-
-        <!-- ほっぺの赤み -->
         <ellipse cx="34" cy="21" rx="4" ry="2.5" fill="rgba(255,150,150,0.35)"/>
-
-        <!-- 汗しずく -->
         <path d="M40 6 Q42 3 44 6 Q44 9.5 42 9.5 Q40 9.5 40 6" fill="#8ab4f8"/>
-
-        <!-- ── 体（球形のぷっくりお腹、しょんべん小僧らしい丸み） ── -->
         <circle cx="22" cy="55" r="15" fill="white"/>
-
-        <!-- おへそ -->
         <circle cx="22" cy="58" r="2.2" fill="#d0e4ff"/>
-
-        <!-- ── 短くてぷにぷにの腕 ── -->
-        <!-- 左腕（後ろへ） -->
         <path d="M10 47 Q4 53 2 60" fill="none" stroke="white" stroke-width="6" stroke-linecap="round">
           <animateTransform attributeName="transform" type="rotate"
             values="-22,10,47; 22,10,47; -22,10,47" dur="0.34s" repeatCount="indefinite"/>
         </path>
-        <!-- 右腕（前へ） -->
         <path d="M33 47 Q39 53 41 60" fill="none" stroke="white" stroke-width="6" stroke-linecap="round">
           <animateTransform attributeName="transform" type="rotate"
             values="22,33,47; -22,33,47; 22,33,47" dur="0.34s" repeatCount="indefinite"/>
         </path>
-
-        <!-- ── 短くてぷにぷにの脚 ── -->
-        <!-- 左脚 -->
         <path d="M16 69 Q11 80 10 91" fill="none" stroke="white" stroke-width="7" stroke-linecap="round">
           <animateTransform attributeName="transform" type="rotate"
             values="-28,16,69; 28,16,69; -28,16,69" dur="0.34s" repeatCount="indefinite"/>
         </path>
-        <!-- 右脚 -->
         <path d="M28 69 Q33 80 34 91" fill="none" stroke="white" stroke-width="7" stroke-linecap="round">
           <animateTransform attributeName="transform" type="rotate"
             values="28,28,69; -28,28,69; 28,28,69" dur="0.34s" repeatCount="indefinite"/>
         </path>
       </g>
-
       <!-- ===== トイレ便器（右端・固定） ===== -->
       <g transform="translate(205, 7)">
-        <!-- タンク蓋 -->
         <rect x="3" y="0" width="56" height="9" rx="4.5" fill="white"/>
-        <!-- タンク本体 -->
         <rect x="7" y="9" width="48" height="27" rx="6" fill="white"/>
-        <!-- フラッシュボタン -->
         <rect x="19" y="15" width="22" height="9" rx="4.5" fill="#c5dafc"/>
-        <!-- タンク→便器ネック -->
         <path d="M10 36 L52 36 L56 46 L6 46 Z" fill="white"/>
-        <!-- 便座（外リング） -->
         <ellipse cx="31" cy="67" rx="29" ry="14.5" fill="white"/>
-        <!-- 水面（青） -->
         <ellipse cx="31" cy="68" rx="22" ry="11" fill="#5b9cf6"/>
-        <!-- 水面ツヤ -->
         <ellipse cx="24" cy="64" rx="7.5" ry="2.8" fill="white" opacity="0.28"/>
-        <!-- ベース上 -->
         <rect x="14" y="79" width="34" height="8" rx="4" fill="white"/>
-        <!-- ベース下（床面） -->
         <rect x="7" y="87" width="48" height="7" rx="3.5" fill="white"/>
       </g>
-
     </svg>
   </div>
   <div class="splash-title">Toilradar</div>
@@ -509,6 +664,59 @@
       <div class="et">この付近にトイレがありません</div>
       <div class="es">「＋」ボタンで追加しましょう</div>
     </div>
+  </div>
+</div>
+
+<!-- ===================== ボトムナビ ===================== -->
+<nav id="bottom-nav">
+  <button class="nav-btn active" id="nav-map" onclick="showPage('map')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+    マップ
+  </button>
+  <button class="nav-btn" id="nav-favorites" onclick="showPage('favorites')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg>
+    お気に入り
+  </button>
+  <button class="nav-btn" id="nav-ranking" onclick="showPage('ranking')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+    ランキング
+  </button>
+  <button class="nav-btn" id="nav-profile" onclick="showPage('profile')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    プロフィール
+  </button>
+</nav>
+
+<!-- ===================== お気に入りページ ===================== -->
+<div class="page-overlay" id="favorites-page">
+  <div class="page-header">
+    <h1>お気に入り</h1>
+  </div>
+  <div class="page-content" id="favorites-content">
+    <div class="fav-empty" id="fav-empty">
+      <div class="fav-empty-icon">🤍</div>
+      <div style="font-size:1rem;font-weight:700;color:#aaa">お気に入りがありません</div>
+      <div style="font-size:0.85rem;color:#bbb">トイレカードのハートボタンで追加できます</div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== ランキングページ ===================== -->
+<div class="page-overlay" id="ranking-page">
+  <div class="page-header">
+    <h1>ランキング</h1>
+  </div>
+  <div class="page-content" id="ranking-content">
+    <div style="display:flex;align-items:center;justify-content:center;padding:40px;color:#bbb">
+      <div class="loading-spinner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ===================== プロフィールページ ===================== -->
+<div class="page-overlay" id="profile-page">
+  <div id="profile-page-content" style="flex:1;overflow-y:auto;-webkit-overflow-scrolling:touch;">
+    <!-- JS で描画 -->
   </div>
 </div>
 
@@ -585,50 +793,115 @@
   </div>
 </div>
 
-<div id="toast"></div>
+<!-- ===================== 認証オーバーレイ ===================== -->
+<div id="auth-overlay">
+  <div class="auth-logo">WC</div>
+  <div class="auth-tagline">近くのトイレをすぐに見つけよう</div>
+  <div class="auth-tabs">
+    <button class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">ログイン</button>
+    <button class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">新規登録</button>
+  </div>
 
-<!-- 利用規約同意ダイアログ -->
-<div id="terms-overlay" style="
-  display:none; position:fixed; inset:0; background:rgba(0,0,0,0.7);
-  z-index:9999; align-items:center; justify-content:center; padding:20px;
-">
-  <div style="
-    background:#fff; border-radius:20px; padding:28px 24px; max-width:380px;
-    width:100%; box-shadow:0 8px 40px rgba(0,0,0,0.3);
-  ">
-    <div style="text-align:center; font-size:2.2rem; margin-bottom:8px; color:#1a73e8; font-weight:900">WC</div>
-    <h2 style="text-align:center; font-size:1.15rem; margin-bottom:16px; color:#1a1a1a">Toilradar をご利用の前に</h2>
-    <p style="font-size:0.85rem; color:#444; line-height:1.75; margin-bottom:16px">
-      本アプリはトイレの場所・清潔さ・設備情報を共有するサービスです。<br>
-      以下の行為は<strong>利用規約違反</strong>であり、発見した場合は通報・対応します。
-    </p>
-    <ul style="font-size:0.82rem; color:#e53935; line-height:2; padding-left:1.2em; margin-bottom:20px">
-      <li>性行為・わいせつ行為を目的とした利用</li>
-      <li>出会い・待ち合わせ目的の投稿</li>
-      <li>盗撮・のぞきに関連する情報の投稿</li>
-      <li>誹謗中傷・差別的な表現の投稿</li>
-    </ul>
-    <p style="font-size:0.78rem; color:#888; margin-bottom:20px; line-height:1.6">
-      上記に同意し、トイレ情報の共有のみを目的として利用します。
-    </p>
-    <button id="terms-agree-btn" style="
-      width:100%; background:#1a73e8; color:white; border:none;
-      border-radius:12px; padding:14px; font-size:1rem; font-weight:700;
-      cursor:pointer;
-    ">同意して始める</button>
-    <button onclick="window.location.href='about:blank'" style="
-      width:100%; background:none; border:none; color:#aaa;
-      font-size:0.85rem; padding:12px; cursor:pointer; margin-top:4px;
-    ">同意しない（閉じる）</button>
+  <!-- ログインフォーム -->
+  <form class="auth-form active" id="login-form" onsubmit="handleLogin(event)">
+    <div id="login-error" class="auth-error"></div>
+    <input class="auth-input" type="email" id="login-email" placeholder="メールアドレス" autocomplete="email" required>
+    <input class="auth-input" type="password" id="login-password" placeholder="パスワード" autocomplete="current-password" required>
+    <button class="auth-btn" type="submit" id="login-btn">ログイン</button>
+  </form>
+
+  <!-- 新規登録フォーム -->
+  <form class="auth-form" id="register-form" onsubmit="handleRegister(event)">
+    <div id="register-error" class="auth-error"></div>
+    <input class="auth-input" type="email" id="register-email" placeholder="メールアドレス" autocomplete="email" required>
+    <input class="auth-input" type="password" id="register-password" placeholder="パスワード（6文字以上）" autocomplete="new-password" minlength="6" required>
+    <label class="terms-check-row">
+      <input type="checkbox" id="terms-check" required>
+      <span>利用規約に同意します。本アプリはトイレ情報の共有のみを目的とし、出会い・わいせつ・盗撮などの違反行為は禁止されています。</span>
+    </label>
+    <button class="auth-btn" type="submit" id="register-btn">アカウントを作成</button>
+  </form>
+</div>
+
+<!-- ===================== プロフィール設定モーダル ===================== -->
+<div class="modal-overlay" id="profile-modal">
+  <div class="modal">
+    <div class="modal-handle-bar"><div></div></div>
+    <div class="modal-header">
+      <h2 id="profile-modal-title">プロフィール設定</h2>
+      <button class="modal-close" id="profile-modal-close-btn" onclick="closeProfileModal()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>アバター</label>
+        <div class="avatar-upload-area">
+          <div class="avatar-preview" id="avatar-preview-circle" onclick="document.getElementById('avatar-file-input').click()">
+            <span id="avatar-preview-initial">?</span>
+          </div>
+          <button type="button" class="avatar-upload-btn" onclick="document.getElementById('avatar-file-input').click()">画像を選択</button>
+          <input type="file" id="avatar-file-input" accept="image/*" style="display:none" onchange="onAvatarFileChange(event)">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>ユーザー名 <span style="color:var(--red)">*</span></label>
+        <input type="text" id="pf-username" placeholder="例: トイレマスター" maxlength="20">
+      </div>
+      <div class="form-group">
+        <label>性別</label>
+        <select id="pf-gender">
+          <option value="">選択しない</option>
+          <option value="男性">男性</option>
+          <option value="女性">女性</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>年齢</label>
+        <input type="number" id="pf-age" placeholder="例: 25" min="1" max="120">
+      </div>
+      <div class="form-group">
+        <label>職業</label>
+        <input type="text" id="pf-occupation" placeholder="例: エンジニア" maxlength="30">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="saveProfile()">保存</button>
+    </div>
   </div>
 </div>
+
+<!-- ===================== コメントモーダル ===================== -->
+<div class="modal-overlay" id="comments-modal">
+  <div class="modal">
+    <div class="modal-handle-bar"><div></div></div>
+    <div class="modal-header">
+      <h2 id="comments-modal-title">コメント</h2>
+      <button class="modal-close" onclick="closeCommentsModal()">×</button>
+    </div>
+    <div class="comment-creator-row" id="comments-creator-row"></div>
+    <div class="comment-list" id="comment-list">
+      <div style="text-align:center;color:#bbb;font-size:0.88rem;padding:20px">コメントはまだありません</div>
+    </div>
+    <div class="comment-input-row" id="comment-input-row">
+      <textarea id="comment-text-input" placeholder="コメントを入力 (150文字以内)" maxlength="150" rows="2" oninput="updateCommentCounter()"></textarea>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px">
+        <span id="comment-char-counter" style="font-size:0.72rem;color:#bbb">0/150</span>
+        <button class="comment-send-btn" id="comment-send-btn" onclick="addComment()">送信</button>
+      </div>
+    </div>
+    <div id="comment-login-notice" style="display:none;padding:12px 16px;text-align:center;font-size:0.85rem;color:#888">
+      コメントするにはログインが必要です
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
 
 <script>
 // ============================================================
 // モデレーション
 // ============================================================
 const NG_WORDS = [
-  // 誹謗中傷
   '死ね','死んで','氏ね','殺す','殺せ','ころす',
   'バカ','ばか','馬鹿','アホ','あほ','阿呆',
   'ブス','ぶす','デブ','でぶ','ハゲ','はげ',
@@ -636,7 +909,6 @@ const NG_WORDS = [
   'ゴミ','ごみ','カス','かす','クズ','くず',
   'チョン','チャンコロ',
   'fuck','shit','bitch','asshole','cunt','nigger',
-  // 性的・出会い目的の利用防止
   '出会い','エッチ','セックス','やりたい','やらせて',
   'ナンパ','援助交際','援交','パパ活','ママ活',
   'セフレ','不倫','浮気','変態','露出',
@@ -650,7 +922,6 @@ function containsBadWord(text) {
   return NG_WORDS.some(w => lower.includes(w.toLowerCase()));
 }
 
-// 10分間に最大5件の投稿制限
 function checkRateLimit() {
   const KEY = 'toilradar_sub';
   const WINDOW = 10 * 60 * 1000;
@@ -681,12 +952,12 @@ async function reportToilet(id, e) {
       reportedAt: firebase.firestore.FieldValue.serverTimestamp(),
       ua: navigator.userAgent.slice(0, 100),
     });
-    showToast('通報しました。ご協力ありがとうございます 🙏');
+    showToast('通報しました。ご協力ありがとうございます');
   } catch { showToast('通報に失敗しました'); }
 }
 
 // ============================================================
-// 状態管理（最初に宣言）
+// 状態管理
 // ============================================================
 let map = null, poiInfoWindow = null;
 let toilets = [];
@@ -695,11 +966,20 @@ let filterType = 'all', filterRating = 0, filterAmenities = new Set();
 let searchQuery = '', searchBounds = null;
 let mapMoved = false, areaTimer;
 
+// Auth/Profile state
+let auth = null;
+let currentUser = null;
+let userProfile = null;
+let currentPage = 'map';
+let profileAvatarBase64 = null;
+let commentsToiletId = null;
+
 const TYPE_COLORS = { '男女共用':'#1a73e8', '男女別':'#34a853', '多目的':'#e37400', 'その他':'#ea4335' };
 const TYPE_BG     = { '男女共用':'#e8f0fe', '男女別':'#e6f4ea', '多目的':'#fef3e0', 'その他':'#fce8e6' };
+const NAV_HEIGHT = 56;
 
 // ============================================================
-// Firebase 初期化（try/catchでエラーを隔離）
+// Firebase 初期化
 // ============================================================
 const FB_CONFIG = {
   apiKey: "AIzaSyA6ByUXn5hYbFnF8qy4g2XerPsSAwZUPb8",
@@ -714,13 +994,512 @@ let db = null, toiletsRef = null;
 try {
   firebase.initializeApp(FB_CONFIG);
   db = firebase.firestore();
+  auth = firebase.auth();
   toiletsRef = db.collection('toilets');
 } catch(e) {
   console.error('Firebase初期化エラー:', e);
 }
 
 // ============================================================
-// マップ初期化（Google Maps コールバック）
+// 認証状態管理
+// ============================================================
+if (auth) {
+  auth.onAuthStateChanged(async user => {
+    currentUser = user;
+    if (user) {
+      await loadUserProfile(user.uid);
+      hideAuthOverlay();
+      // プロフィールが未設定の場合はプロフィール設定を促す
+      if (!userProfile || !userProfile.username) {
+        showProfileSetup(false);
+      }
+    } else {
+      userProfile = null;
+      showAuthOverlay();
+    }
+  });
+}
+
+function showAuthOverlay() {
+  document.getElementById('auth-overlay').classList.add('active');
+}
+function hideAuthOverlay() {
+  document.getElementById('auth-overlay').classList.remove('active');
+}
+
+function switchAuthTab(tab) {
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('login-form').classList.toggle('active', tab === 'login');
+  document.getElementById('register-form').classList.toggle('active', tab === 'register');
+  document.getElementById('login-error').classList.remove('show');
+  document.getElementById('register-error').classList.remove('show');
+}
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+  errEl.classList.remove('show');
+  btn.disabled = true; btn.textContent = 'ログイン中...';
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+  } catch(err) {
+    errEl.textContent = authErrorMessage(err.code);
+    errEl.classList.add('show');
+  } finally {
+    btn.disabled = false; btn.textContent = 'ログイン';
+  }
+}
+
+async function handleRegister(e) {
+  e.preventDefault();
+  const email = document.getElementById('register-email').value.trim();
+  const password = document.getElementById('register-password').value;
+  const termsChecked = document.getElementById('terms-check').checked;
+  const btn = document.getElementById('register-btn');
+  const errEl = document.getElementById('register-error');
+  errEl.classList.remove('show');
+  if (!termsChecked) {
+    errEl.textContent = '利用規約に同意してください';
+    errEl.classList.add('show'); return;
+  }
+  btn.disabled = true; btn.textContent = '作成中...';
+  try {
+    await auth.createUserWithEmailAndPassword(email, password);
+    // onAuthStateChanged will fire, and show profile setup
+  } catch(err) {
+    errEl.textContent = authErrorMessage(err.code);
+    errEl.classList.add('show');
+  } finally {
+    btn.disabled = false; btn.textContent = 'アカウントを作成';
+  }
+}
+
+function authErrorMessage(code) {
+  const map = {
+    'auth/user-not-found': 'メールアドレスが見つかりません',
+    'auth/wrong-password': 'パスワードが間違っています',
+    'auth/invalid-email': 'メールアドレスの形式が正しくありません',
+    'auth/email-already-in-use': 'このメールアドレスはすでに使用されています',
+    'auth/weak-password': 'パスワードは6文字以上にしてください',
+    'auth/too-many-requests': 'しばらく時間をおいてから再試行してください',
+    'auth/invalid-credential': 'メールアドレスまたはパスワードが正しくありません',
+    'auth/network-request-failed': 'ネットワークエラーが発生しました',
+  };
+  return map[code] || 'エラーが発生しました: ' + code;
+}
+
+// ============================================================
+// ユーザープロフィール
+// ============================================================
+async function loadUserProfile(uid) {
+  if (!db) return;
+  try {
+    const doc = await db.collection('users').doc(uid).get();
+    if (doc.exists) {
+      userProfile = { uid, ...doc.data() };
+    } else {
+      userProfile = null;
+    }
+  } catch(e) {
+    console.error('プロフィール読み込みエラー:', e);
+  }
+}
+
+function showProfileSetup(canClose = true) {
+  document.getElementById('profile-modal-title').textContent = 'プロフィール設定';
+  document.getElementById('profile-modal-close-btn').style.display = canClose ? '' : 'none';
+  profileAvatarBase64 = userProfile?.avatarBase64 || null;
+  document.getElementById('pf-username').value = userProfile?.username || '';
+  document.getElementById('pf-gender').value = userProfile?.gender || '';
+  document.getElementById('pf-age').value = userProfile?.age || '';
+  document.getElementById('pf-occupation').value = userProfile?.occupation || '';
+  updateAvatarPreview();
+  document.getElementById('profile-modal').classList.add('open');
+}
+
+function closeProfileModal() {
+  document.getElementById('profile-modal').classList.remove('open');
+}
+
+function updateAvatarPreview() {
+  const circle = document.getElementById('avatar-preview-circle');
+  const initial = document.getElementById('avatar-preview-initial');
+  if (profileAvatarBase64) {
+    circle.innerHTML = `<img src="${profileAvatarBase64}" style="width:100%;height:100%;object-fit:cover;border-radius:50%">`;
+  } else {
+    const uname = document.getElementById('pf-username').value.trim();
+    initial.textContent = uname ? uname.charAt(0).toUpperCase() : '?';
+    circle.innerHTML = '';
+    circle.appendChild(initial);
+  }
+}
+
+function onAvatarFileChange(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  resizeImageToBase64(file, 100).then(b64 => {
+    profileAvatarBase64 = b64;
+    updateAvatarPreview();
+  });
+}
+
+function resizeImageToBase64(file, size = 100) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = size; canvas.height = size;
+      const ctx = canvas.getContext('2d');
+      const min = Math.min(img.width, img.height);
+      const sx = (img.width - min) / 2;
+      const sy = (img.height - min) / 2;
+      ctx.drawImage(img, sx, sy, min, min, 0, 0, size, size);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.8));
+    };
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+async function saveProfile() {
+  if (!currentUser || !db) return;
+  const username = document.getElementById('pf-username').value.trim();
+  if (!username) { showToast('ユーザー名を入力してください'); return; }
+  const data = {
+    uid: currentUser.uid,
+    username,
+    gender: document.getElementById('pf-gender').value || '',
+    age: parseInt(document.getElementById('pf-age').value) || null,
+    occupation: document.getElementById('pf-occupation').value.trim() || '',
+    avatarBase64: profileAvatarBase64 || '',
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+  if (!userProfile) {
+    data.points = 0;
+    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+  }
+  const btn = document.querySelector('#profile-modal .btn-primary');
+  btn.textContent = '保存中...'; btn.disabled = true;
+  try {
+    await db.collection('users').doc(currentUser.uid).set(data, { merge: true });
+    userProfile = { ...userProfile, ...data };
+    closeProfileModal();
+    showToast('プロフィールを保存しました');
+    if (currentPage === 'profile') loadProfilePage();
+  } catch(e) {
+    showToast('保存失敗: ' + e.message);
+  } finally {
+    btn.textContent = '保存'; btn.disabled = false;
+  }
+}
+
+// ============================================================
+// ページナビゲーション
+// ============================================================
+function showPage(name) {
+  currentPage = name;
+  // Update nav buttons
+  ['map','favorites','ranking','profile'].forEach(p => {
+    document.getElementById('nav-' + p).classList.toggle('active', p === name);
+  });
+  // Show/hide page overlays
+  ['favorites-page','ranking-page','profile-page'].forEach(id => {
+    document.getElementById(id).classList.remove('active');
+  });
+  // Show/hide map UI
+  const isMap = name === 'map';
+  document.getElementById('bottom-sheet').style.display = isMap ? '' : 'none';
+  document.getElementById('fab-group').style.display = isMap ? '' : 'none';
+  document.getElementById('top-overlay').style.display = isMap ? '' : 'none';
+
+  if (name === 'favorites') {
+    document.getElementById('favorites-page').classList.add('active');
+    loadFavoritesPage();
+  } else if (name === 'ranking') {
+    document.getElementById('ranking-page').classList.add('active');
+    loadRankingPage();
+  } else if (name === 'profile') {
+    document.getElementById('profile-page').classList.add('active');
+    loadProfilePage();
+  }
+}
+
+// ============================================================
+// お気に入り機能
+// ============================================================
+async function toggleFavorite(toiletId, e) {
+  if (e) e.stopPropagation();
+  if (!currentUser || !db) { showToast('ログインが必要です'); return; }
+  const isFav = userProfile?.favoriteIds?.includes(toiletId);
+  try {
+    const op = isFav
+      ? firebase.firestore.FieldValue.arrayRemove(toiletId)
+      : firebase.firestore.FieldValue.arrayUnion(toiletId);
+    await db.collection('users').doc(currentUser.uid).update({ favoriteIds: op });
+    if (!userProfile) userProfile = {};
+    if (!userProfile.favoriteIds) userProfile.favoriteIds = [];
+    if (isFav) {
+      userProfile.favoriteIds = userProfile.favoriteIds.filter(id => id !== toiletId);
+    } else {
+      userProfile.favoriteIds.push(toiletId);
+    }
+    // Update button states in all cards
+    document.querySelectorAll(`.card-fav-btn[data-id="${toiletId}"]`).forEach(btn => {
+      btn.classList.toggle('favorited', !isFav);
+      btn.innerHTML = !isFav ? '&#10084;' : '&#9825;';
+    });
+    showToast(isFav ? 'お気に入りを解除しました' : 'お気に入りに追加しました');
+  } catch(err) {
+    showToast('エラー: ' + err.message);
+  }
+}
+
+async function loadFavoritesPage() {
+  const content = document.getElementById('favorites-content');
+  const favEmpty = document.getElementById('fav-empty');
+  if (!currentUser || !userProfile) {
+    content.innerHTML = '<div class="fav-empty"><div class="fav-empty-icon">🔒</div><div style="font-size:1rem;font-weight:700;color:#aaa">ログインが必要です</div></div>';
+    return;
+  }
+  const favIds = userProfile?.favoriteIds || [];
+  if (favIds.length === 0) {
+    // Remove any existing cards
+    Array.from(content.children).forEach(c => { if (c.id !== 'fav-empty') c.remove(); });
+    favEmpty.style.display = 'flex';
+    return;
+  }
+  favEmpty.style.display = 'none';
+  const favToilets = toilets.filter(t => favIds.includes(t.id));
+  Array.from(content.children).forEach(c => { if (c.id !== 'fav-empty') c.remove(); });
+  if (favToilets.length === 0) {
+    favEmpty.style.display = 'flex';
+    return;
+  }
+  favToilets.forEach(t => content.appendChild(buildCard(t)));
+}
+
+// ============================================================
+// ランキング機能
+// ============================================================
+async function loadRankingPage() {
+  const content = document.getElementById('ranking-content');
+  if (!db) { content.innerHTML = '<div style="text-align:center;color:#bbb;padding:40px">データを取得できません</div>'; return; }
+  content.innerHTML = '<div style="display:flex;align-items:center;justify-content:center;padding:40px"><div class="loading-spinner"></div></div>';
+  try {
+    const snap = await db.collection('users').orderBy('points', 'desc').limit(20).get();
+    if (snap.empty) {
+      content.innerHTML = '<div style="text-align:center;color:#bbb;padding:40px">まだユーザーがいません</div>';
+      return;
+    }
+    content.innerHTML = '';
+    snap.docs.forEach((doc, idx) => {
+      const u = doc.data();
+      const rank = idx + 1;
+      const rankClass = rank === 1 ? 'gold' : rank === 2 ? 'silver' : rank === 3 ? 'bronze' : '';
+      const rankLabel = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : rank;
+      const row = document.createElement('div');
+      row.className = 'rank-row';
+      row.innerHTML = `
+        <div class="rank-num ${rankClass}">${rankLabel}</div>
+        ${buildAvatarCircle(u.avatarBase64, u.username, 'sm')}
+        <div class="rank-info">
+          <div class="rank-name">${esc(u.username || '名無し')}</div>
+          <div class="rank-pts"><strong>${u.points || 0}</strong>件登録</div>
+        </div>`;
+      content.appendChild(row);
+    });
+  } catch(e) {
+    content.innerHTML = `<div style="text-align:center;color:#bbb;padding:40px">読み込みエラー</div>`;
+  }
+}
+
+// ============================================================
+// コメント機能
+// ============================================================
+function openComments(toiletId, e) {
+  if (e) e.stopPropagation();
+  commentsToiletId = toiletId;
+  const t = toilets.find(x => x.id === toiletId);
+  document.getElementById('comments-modal-title').textContent = t ? esc(t.name) : 'コメント';
+  const creatorRow = document.getElementById('comments-creator-row');
+  if (t && t.createdByName) {
+    creatorRow.textContent = '登録者: ' + t.createdByName;
+  } else {
+    creatorRow.textContent = '';
+  }
+  // Show/hide comment input based on auth
+  const inputRow = document.getElementById('comment-input-row');
+  const loginNotice = document.getElementById('comment-login-notice');
+  if (currentUser) {
+    inputRow.style.display = 'flex';
+    loginNotice.style.display = 'none';
+  } else {
+    inputRow.style.display = 'none';
+    loginNotice.style.display = 'block';
+  }
+  document.getElementById('comment-text-input').value = '';
+  document.getElementById('comment-char-counter').textContent = '0/150';
+  document.getElementById('comments-modal').classList.add('open');
+  loadComments(toiletId);
+}
+
+function closeCommentsModal() {
+  document.getElementById('comments-modal').classList.remove('open');
+  commentsToiletId = null;
+}
+
+async function loadComments(toiletId) {
+  const list = document.getElementById('comment-list');
+  list.innerHTML = '<div style="text-align:center;color:#bbb;font-size:0.88rem;padding:20px"><div class="loading-spinner" style="margin:auto"></div></div>';
+  if (!db) { list.innerHTML = '<div style="text-align:center;color:#bbb;padding:20px">データを取得できません</div>'; return; }
+  try {
+    const snap = await db.collection('toilets').doc(toiletId).collection('comments')
+      .orderBy('createdAt', 'asc').limit(100).get();
+    if (snap.empty) {
+      list.innerHTML = '<div style="text-align:center;color:#bbb;font-size:0.88rem;padding:20px">コメントはまだありません</div>';
+      return;
+    }
+    list.innerHTML = '';
+    snap.docs.forEach(doc => {
+      const c = doc.data();
+      const item = document.createElement('div');
+      item.className = 'comment-item';
+      const timeStr = c.createdAt ? formatTime(c.createdAt.toDate ? c.createdAt.toDate() : new Date(c.createdAt)) : '';
+      const canDelete = currentUser && (currentUser.uid === c.userId || userProfile?.isAdmin);
+      item.innerHTML = `
+        ${buildAvatarCircle(c.userAvatar, c.userName, 'xs')}
+        <div class="comment-body">
+          <div class="comment-author">${esc(c.userName || '名無し')}</div>
+          <div class="comment-text">${esc(c.text)}</div>
+          <div class="comment-time">${timeStr}</div>
+        </div>
+        ${canDelete ? `<button class="comment-del-btn" onclick="deleteComment('${toiletId}','${doc.id}')">削除</button>` : ''}`;
+      list.appendChild(item);
+    });
+  } catch(e) {
+    list.innerHTML = '<div style="text-align:center;color:#bbb;padding:20px">読み込みエラー</div>';
+  }
+}
+
+function updateCommentCounter() {
+  const len = document.getElementById('comment-text-input').value.length;
+  document.getElementById('comment-char-counter').textContent = len + '/150';
+}
+
+async function addComment() {
+  if (!currentUser || !commentsToiletId || !db) return;
+  const text = document.getElementById('comment-text-input').value.trim();
+  if (!text) { showToast('コメントを入力してください'); return; }
+  if (containsBadWord(text)) { showToast('不適切な言葉が含まれています'); return; }
+  const btn = document.getElementById('comment-send-btn');
+  btn.disabled = true;
+  try {
+    await db.collection('toilets').doc(commentsToiletId).collection('comments').add({
+      userId: currentUser.uid,
+      userName: userProfile?.username || '名無し',
+      userAvatar: userProfile?.avatarBase64 || '',
+      text,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    });
+    document.getElementById('comment-text-input').value = '';
+    document.getElementById('comment-char-counter').textContent = '0/150';
+    loadComments(commentsToiletId);
+  } catch(e) {
+    showToast('送信失敗: ' + e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteComment(toiletId, commentId) {
+  if (!confirm('このコメントを削除しますか？')) return;
+  try {
+    await db.collection('toilets').doc(toiletId).collection('comments').doc(commentId).delete();
+    loadComments(toiletId);
+    showToast('コメントを削除しました');
+  } catch(e) {
+    showToast('削除失敗: ' + e.message);
+  }
+}
+
+// ============================================================
+// プロフィールページ
+// ============================================================
+function loadProfilePage() {
+  const content = document.getElementById('profile-page-content');
+  if (!currentUser || !userProfile) {
+    content.innerHTML = `
+      <div style="padding:max(24px, var(--safe-top)) 20px 24px;display:flex;flex-direction:column;align-items:center;gap:16px;background:white;border-bottom:1px solid #f0f0f0;">
+        <div style="font-size:2rem">🔒</div>
+        <div style="font-size:1rem;font-weight:700;color:#aaa">ログインが必要です</div>
+      </div>`;
+    return;
+  }
+  const safeTop = 'max(24px, var(--safe-top))';
+  content.innerHTML = `
+    <div class="profile-hero" style="padding-top:${safeTop}">
+      ${buildAvatarCircle(userProfile.avatarBase64, userProfile.username, 'large')}
+      <div class="profile-hero-name">${esc(userProfile.username || '名無し')}</div>
+      <div class="profile-hero-sub">
+        ${[userProfile.gender, userProfile.age ? userProfile.age + '歳' : '', userProfile.occupation].filter(Boolean).join(' · ')}
+      </div>
+      <div class="profile-stats">
+        <div class="profile-stat">
+          <div class="profile-stat-num">${userProfile.points || 0}</div>
+          <div class="profile-stat-label">登録トイレ数</div>
+        </div>
+      </div>
+    </div>
+    <div class="profile-actions">
+      <button class="profile-action-btn" onclick="showProfileSetup(true)">
+        <div class="icon blue">✏️</div>
+        <span>プロフィールを編集</span>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2.5" stroke-linecap="round" style="margin-left:auto"><path d="M9 18l6-6-6-6"/></svg>
+      </button>
+      <button class="profile-action-btn danger" onclick="handleLogout()">
+        <div class="icon">🚪</div>
+        <span>ログアウト</span>
+      </button>
+    </div>`;
+
+  // Fix large avatar circle inline
+  const hero = content.querySelector('.profile-hero');
+  const circle = hero.querySelector('.avatar-circle');
+  if (circle) {
+    circle.style.width = '80px';
+    circle.style.height = '80px';
+    circle.style.fontSize = '2rem';
+  }
+}
+
+function buildAvatarCircle(avatarBase64, username, size) {
+  const sizeClass = size === 'sm' ? ' sm' : size === 'xs' ? ' xs' : '';
+  if (avatarBase64) {
+    return `<div class="avatar-circle${sizeClass}"><img src="${avatarBase64}" alt="${esc(username||'')}"></div>`;
+  }
+  const initial = (username || '?').charAt(0).toUpperCase();
+  return `<div class="avatar-circle${sizeClass}">${initial}</div>`;
+}
+
+async function handleLogout() {
+  if (!confirm('ログアウトしますか？')) return;
+  try {
+    await auth.signOut();
+    showToast('ログアウトしました');
+    showPage('map');
+  } catch(e) {
+    showToast('ログアウト失敗: ' + e.message);
+  }
+}
+
+// ============================================================
+// マップ初期化
 // ============================================================
 window.initMap = function() {
   map = new google.maps.Map(document.getElementById('map-container'), {
@@ -739,7 +1518,6 @@ window.initMap = function() {
     poiInfoWindow.close();
 
     if (e.placeId) {
-      // 店舗・施設タップ時 → 登録ボタンのポップアップを表示
       e.stop();
       poiInfoWindow.setPosition(e.latLng);
       poiInfoWindow.setContent(
@@ -766,7 +1544,6 @@ window.initMap = function() {
     if (mapMoved) { clearTimeout(areaTimer); areaTimer = setTimeout(showSearchAreaBtn, 600); }
   });
 
-  // Places Autocomplete（店舗検索）
   if (google.maps.places) {
     const ac = new google.maps.places.Autocomplete(
       document.getElementById('f-place-search'),
@@ -794,7 +1571,6 @@ window.initMap = function() {
 // Firestore リアルタイム同期
 // ============================================================
 const splashStart = Date.now();
-// Maps/Firestoreが応答しない場合でも最大6秒で強制終了
 setTimeout(() => hideSplash(), 6000);
 
 function hideSplash() {
@@ -808,9 +1584,7 @@ function hideSplash() {
 }
 
 function startFirestore() {
-  // 最大5秒でスプラッシュを強制終了（2秒保証込み）
   setTimeout(hideSplash, 5000);
-
   if (!toiletsRef) {
     setSyncStatus('offline');
     document.getElementById('loading-state').style.display = 'none';
@@ -948,6 +1722,8 @@ function buildCard(t) {
     ? '★'.repeat(t.rating) + `<span style="color:#ddd">${'★'.repeat(5-t.rating)}</span>`
     : '<span class="nr">未評価</span>';
   const amenities = [t.washlet&&'ウォシュレット', t.accessible&&'♿ 車椅子対応', t.babyChange&&'おむつ替え', t.h24&&'24時間', t.paid&&'有料'].filter(Boolean);
+  const isFav = userProfile?.favoriteIds?.includes(t.id) || false;
+  const canEdit = currentUser && (currentUser.uid === t.createdBy || userProfile?.isAdmin);
 
   const div = document.createElement('div');
   div.className = 'toilet-card' + (t.id === selectedId ? ' selected' : '');
@@ -956,6 +1732,7 @@ function buildCard(t) {
     <div class="card-icon" style="background:${bgColor};font-size:0.7rem;font-weight:900;color:${color}">WC</div>
     <div class="card-body">
       <div class="card-name">${esc(t.name)}</div>
+      ${t.createdByName ? `<div class="card-by">by ${esc(t.createdByName)}</div>` : ''}
       <div class="card-meta">
         <span class="type-badge" style="background:${color}">${esc(t.type)}</span>
         <span class="card-rating">${stars}</span>
@@ -963,9 +1740,16 @@ function buildCard(t) {
       ${t.access && t.access !== '誰でも利用可' ? `<div style="margin-top:4px"><span class="amenity-tag" style="background:#fff3e0;color:#e37400">${esc(t.access)}</span></div>` : ''}
       ${amenities.length ? `<div class="card-amenities">${amenities.map(a=>`<span class="amenity-tag">${a}</span>`).join('')}</div>` : ''}
       ${t.notes ? `<div class="card-notes">${esc(t.notes)}</div>` : ''}
+      <div class="card-action-row">
+        <button class="card-fav-btn ${isFav ? 'favorited' : ''}" data-id="${t.id}" onclick="toggleFavorite('${t.id}',event)">${isFav ? '&#10084;' : '&#9825;'}</button>
+        <button class="card-comment-btn" onclick="openComments('${t.id}',event)">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+          コメント
+        </button>
+      </div>
     </div>
     <button class="card-report-btn" onclick="reportToilet('${t.id}',event)" title="通報">通報</button>
-    <button class="card-edit-btn" onclick="event.stopPropagation();openEditModal('${t.id}')">編集</button>`;
+    ${canEdit ? `<button class="card-edit-btn" onclick="event.stopPropagation();openEditModal('${t.id}')">編集</button>` : ''}`;
 
   div.addEventListener('click', () => {
     selectToilet(t.id);
@@ -1008,7 +1792,7 @@ function setSheetSnap(snap, animate = true) {
   sheet.classList.add('snap-' + snap);
   if (!animate) requestAnimationFrame(() => sheet.classList.remove('no-tr'));
   const h = { peek: 110, half: window.innerHeight*0.5, full: window.innerHeight*0.88 };
-  document.getElementById('fab-group').style.bottom = (h[snap] + 16) + 'px';
+  document.getElementById('fab-group').style.bottom = (h[snap] + NAV_HEIGHT + 16) + 'px';
 }
 
 function onDS(e) { dragStartY=(e.touches?.[0]||e).clientY; dragStartT=getTranslateY(sheet); isDragging=true; sheet.classList.add('no-tr'); }
@@ -1038,6 +1822,7 @@ sheetHeader.addEventListener('click', () => { if (Math.abs(getTranslateY(sheet)-
 // モーダル
 // ============================================================
 function openAddModal(latlng) {
+  if (!currentUser) { showToast('ログインが必要です'); showAuthOverlay(); return; }
   pendingLatLng = latlng; editingId = null;
   document.getElementById('modal-title').textContent = 'トイレを追加';
   document.getElementById('btn-delete').style.display = 'none';
@@ -1051,6 +1836,11 @@ function openAddModal(latlng) {
 
 function openEditModal(id) {
   const t = toilets.find(x => x.id===id); if (!t) return;
+  // Permission check
+  if (currentUser && (currentUser.uid !== t.createdBy && !userProfile?.isAdmin)) {
+    showToast('編集権限がありません');
+    return;
+  }
   editingId = id; pendingLatLng = { lat: t.lat, lng: t.lng };
   document.getElementById('modal-title').textContent = 'トイレを編集';
   document.getElementById('btn-delete').style.display = 'block';
@@ -1082,6 +1872,7 @@ function clearForm() {
 }
 
 async function saveToilet() {
+  if (!currentUser) { showToast('ログインが必要です'); return; }
   const name = document.getElementById('f-name').value.trim();
   if (!name) { showToast('名前を入力してください'); document.getElementById('f-name').focus(); return; }
   if (!pendingLatLng) { showToast('地図をタップして場所を選んでください'); closeModal(); return; }
@@ -1089,7 +1880,7 @@ async function saveToilet() {
 
   const notes = document.getElementById('f-notes').value.trim();
   if (containsBadWord(name) || containsBadWord(notes)) {
-    showToast('不適切な言葉が含まれています。内容を修正してください ⚠️');
+    showToast('不適切な言葉が含まれています。内容を修正してください');
     return;
   }
   if (!editingId && !checkRateLimit()) {
@@ -1116,11 +1907,22 @@ async function saveToilet() {
   try {
     if (editingId) {
       await toiletsRef.doc(editingId).update({ ...data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() });
-      showToast('更新しました ✓');
+      showToast('更新しました');
     } else {
-      const doc = await toiletsRef.add({ ...data, addedAt: firebase.firestore.FieldValue.serverTimestamp() });
+      // Add creator info
+      data.createdBy = currentUser.uid;
+      data.createdByName = userProfile?.username || '名無し';
+      data.addedAt = firebase.firestore.FieldValue.serverTimestamp();
+      const doc = await toiletsRef.add(data);
       selectedId = doc.id; setSheetSnap('half');
-      showToast('追加しました ✓');
+      // Increment user points
+      if (db) {
+        await db.collection('users').doc(currentUser.uid).update({
+          points: firebase.firestore.FieldValue.increment(1)
+        });
+        if (userProfile) userProfile.points = (userProfile.points || 0) + 1;
+      }
+      showToast('追加しました');
     }
     closeModal(); searchBounds=null;
   } catch(e) { showToast('保存失敗: '+e.message); }
@@ -1128,9 +1930,23 @@ async function saveToilet() {
 }
 
 async function deleteToilet() {
-  if (!editingId||!confirm('このトイレを削除しますか？')) return;
+  const t = toilets.find(x => x.id === editingId);
+  if (!editingId || !confirm('このトイレを削除しますか？')) return;
+  // Permission check
+  if (currentUser && t && currentUser.uid !== t.createdBy && !userProfile?.isAdmin) {
+    showToast('削除権限がありません'); return;
+  }
   try {
     await toiletsRef.doc(editingId).delete();
+    // Decrement points if creator
+    if (t && t.createdBy && db) {
+      await db.collection('users').doc(t.createdBy).update({
+        points: firebase.firestore.FieldValue.increment(-1)
+      });
+      if (currentUser && currentUser.uid === t.createdBy && userProfile) {
+        userProfile.points = Math.max(0, (userProfile.points || 0) - 1);
+      }
+    }
     if (selectedId===editingId) selectedId=null;
     closeModal(); showToast('削除しました');
   } catch(e) { showToast('削除失敗: '+e.message); }
@@ -1161,6 +1977,15 @@ async function goToCurrentLocation() {
 // ============================================================
 function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
+function formatTime(date) {
+  const now = new Date();
+  const diff = Math.floor((now - date) / 1000);
+  if (diff < 60) return 'たった今';
+  if (diff < 3600) return Math.floor(diff / 60) + '分前';
+  if (diff < 86400) return Math.floor(diff / 3600) + '時間前';
+  return date.getFullYear() + '/' + (date.getMonth()+1) + '/' + date.getDate();
+}
+
 let toastTimer;
 function showToast(msg) {
   const el=document.getElementById('toast'); el.textContent=msg; el.classList.add('show');
@@ -1168,18 +1993,8 @@ function showToast(msg) {
 }
 
 document.getElementById('toilet-modal').addEventListener('click', function(e){ if(e.target===this)closeModal(); });
-
-// 初回起動時に利用規約の同意を求める
-(function() {
-  if (!localStorage.getItem('toilradar_agreed')) {
-    const overlay = document.getElementById('terms-overlay');
-    overlay.style.display = 'flex';
-    document.getElementById('terms-agree-btn').addEventListener('click', () => {
-      localStorage.setItem('toilradar_agreed', '1');
-      overlay.style.display = 'none';
-    });
-  }
-})();
+document.getElementById('comments-modal').addEventListener('click', function(e){ if(e.target===this)closeCommentsModal(); });
+document.getElementById('profile-modal').addEventListener('click', function(e){ if(e.target===this){ if(userProfile && userProfile.username) closeProfileModal(); } });
 </script>
 </body>
 </html>
