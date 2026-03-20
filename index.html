@@ -809,6 +809,7 @@
     <input class="auth-input" type="email" id="login-email" placeholder="メールアドレス" autocomplete="email" required>
     <input class="auth-input" type="password" id="login-password" placeholder="パスワード" autocomplete="current-password" required>
     <button class="auth-btn" type="submit" id="login-btn">ログイン</button>
+    <button type="button" style="background:none;border:none;color:var(--blue);font-size:0.85rem;cursor:pointer;align-self:center;padding:4px 0" onclick="handlePasswordReset()">パスワードを忘れた方はこちら</button>
   </form>
 
   <!-- 新規登録フォーム -->
@@ -1078,6 +1079,25 @@ async function handleRegister(e) {
     errEl.classList.add('show');
   } finally {
     btn.disabled = false; btn.textContent = 'アカウントを作成';
+  }
+}
+
+async function handlePasswordReset() {
+  const email = document.getElementById('login-email').value.trim();
+  if (!email) {
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = 'メールアドレスを入力してからタップしてください';
+    errEl.classList.add('show');
+    return;
+  }
+  try {
+    await auth.sendPasswordResetEmail(email);
+    showToast('パスワードリセットメールを送信しました');
+    document.getElementById('login-error').classList.remove('show');
+  } catch(err) {
+    const errEl = document.getElementById('login-error');
+    errEl.textContent = authErrorMessage(err.code);
+    errEl.classList.add('show');
   }
 }
 
