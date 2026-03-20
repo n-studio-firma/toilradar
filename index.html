@@ -851,7 +851,7 @@
     <input class="auth-input" type="password" id="register-password" placeholder="パスワード（6文字以上）" autocomplete="new-password" minlength="6" required>
     <label class="terms-check-row">
       <input type="checkbox" id="terms-check" required>
-      <span>利用規約に同意します。本アプリはトイレ情報の共有のみを目的とし、出会い・わいせつ・盗撮などの違反行為は禁止されています。<a href="privacy.html" target="_blank" style="color:var(--blue)">プライバシーポリシー</a>もご確認ください。</span>
+      <span><a href="terms.html" target="_blank" style="color:var(--blue)">利用規約</a>および<a href="privacy.html" target="_blank" style="color:var(--blue)">プライバシーポリシー</a>に同意します。本アプリはトイレ情報の共有のみを目的とし、出会い・わいせつ・盗撮などの違反行為は禁止されています。</span>
     </label>
     <button class="auth-btn" type="submit" id="register-btn">アカウントを作成</button>
   </form>
@@ -1555,6 +1555,10 @@ function loadProfilePage() {
         <div class="icon">🚪</div>
         <span>ログアウト</span>
       </button>
+      <button class="profile-action-btn danger" onclick="handleDeleteAccount()">
+        <div class="icon">🗑️</div>
+        <span>退会する</span>
+      </button>
     </div>
     <div style="padding:0 16px 8px">
       <div style="font-size:0.85rem;font-weight:700;color:#888;padding:8px 0 10px;border-bottom:1px solid #f0f0f0;margin-bottom:8px">登録したトイレ</div>
@@ -1600,6 +1604,42 @@ async function handleLogout() {
     showPage('map');
   } catch(e) {
     showToast('ログアウト失敗: ' + e.message);
+  }
+}
+
+async function handleDeleteAccount() {
+  if (!currentUser || !db) return;
+  const confirmed = confirm(
+    '退会すると以下のデータが削除されます。\n\n' +
+    '・プロフィール情報\n' +
+    '・お気に入り一覧\n\n' +
+    '※登録したトイレ情報は残ります。\n\n' +
+    '本当に退会しますか？'
+  );
+  if (!confirmed) return;
+
+  try {
+    // Firestoreのユーザードキュメントを削除
+    await db.collection('users').doc(currentUser.uid).delete();
+
+    // Firebase StorageのアバターをLet削除（あれば）
+    if (storage) {
+      try {
+        await storage.ref(`avatars/${currentUser.uid}/avatar.jpg`).delete();
+      } catch {} // アバターがなくてもエラーを無視
+    }
+
+    // Firebase Authアカウントを削除
+    await currentUser.delete();
+
+    localStorage.removeItem('toilradar_onboarded');
+    showToast('退会しました');
+  } catch(err) {
+    if (err.code === 'auth/requires-recent-login') {
+      showToast('セキュリティのため、一度ログアウトして再ログイン後に退会してください');
+    } else {
+      showToast('退会失敗: ' + err.message);
+    }
   }
 }
 
