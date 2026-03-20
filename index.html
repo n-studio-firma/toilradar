@@ -549,6 +549,38 @@
     .profile-action-btn.danger { color: var(--red); }
     .profile-action-btn.danger .icon { background: #fdecea; }
     .profile-action-btn .icon.blue { background: #e8f0fe; }
+
+    /* ===================== オンボーディング ===================== */
+    #onboarding-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 9500;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+    #onboarding-overlay.open { display: flex; }
+    .onboarding-card {
+      background: white;
+      border-radius: 24px;
+      padding: 32px 24px 24px;
+      width: 100%;
+      max-width: 340px;
+      text-align: center;
+      box-shadow: 0 8px 40px rgba(0,0,0,0.25);
+    }
+    .onboarding-icon { font-size: 3.5rem; margin-bottom: 16px; }
+    .onboarding-title { font-size: 1.15rem; font-weight: 800; color: #1a1a1a; margin-bottom: 10px; }
+    .onboarding-desc { font-size: 0.9rem; color: #666; line-height: 1.7; margin-bottom: 24px; }
+    .onboarding-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 20px; }
+    .onboarding-dot { width: 8px; height: 8px; border-radius: 50%; background: #e0e0e0; transition: background 0.2s; }
+    .onboarding-dot.active { background: var(--blue); }
+    .onboarding-btns { display: flex; gap: 10px; }
+    .onboarding-skip { flex: 1; padding: 12px; border: 1.5px solid #e0e0e0; border-radius: 12px; background: none; font-size: 0.9rem; color: #888; cursor: pointer; font-weight: 600; }
+    .onboarding-next { flex: 2; padding: 12px; border: none; border-radius: 12px; background: var(--blue); color: white; font-size: 0.9rem; font-weight: 700; cursor: pointer; }
+    .onboarding-next:active { opacity: 0.85; }
   </style>
 </head>
 <body>
@@ -899,6 +931,20 @@
 
 <div id="toast"></div>
 
+<!-- ===================== オンボーディング ===================== -->
+<div id="onboarding-overlay">
+  <div class="onboarding-card">
+    <div class="onboarding-icon" id="ob-icon"></div>
+    <div class="onboarding-title" id="ob-title"></div>
+    <div class="onboarding-desc" id="ob-desc"></div>
+    <div class="onboarding-dots" id="ob-dots"></div>
+    <div class="onboarding-btns">
+      <button class="onboarding-skip" onclick="closeOnboarding()">スキップ</button>
+      <button class="onboarding-next" id="ob-next-btn" onclick="onboardingNext()">次へ</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ============================================================
 // モデレーション
@@ -1225,12 +1271,16 @@ async function saveProfile() {
       data.points = 0;
       data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
     }
+    const isNewUser = !userProfile || !userProfile.username;
     await db.collection('users').doc(currentUser.uid).set(data, { merge: true });
     userProfile = { ...userProfile, ...data };
     profileAvatarURL = finalAvatarURL;
     closeProfileModal();
     showToast('プロフィールを保存しました');
     if (currentPage === 'profile') loadProfilePage();
+    if (isNewUser && !localStorage.getItem('toilradar_onboarded')) {
+      setTimeout(() => showOnboarding(), 400);
+    }
   } catch(e) {
     showToast('保存失敗: ' + e.message);
   } finally {
@@ -2071,6 +2121,69 @@ function showToast(msg) {
 document.getElementById('toilet-modal').addEventListener('click', function(e){ if(e.target===this)closeModal(); });
 document.getElementById('comments-modal').addEventListener('click', function(e){ if(e.target===this)closeCommentsModal(); });
 document.getElementById('profile-modal').addEventListener('click', function(e){ if(e.target===this){ if(userProfile && userProfile.username) closeProfileModal(); } });
+
+// ============================================================
+// オンボーディング
+// ============================================================
+const ONBOARDING_STEPS = [
+  {
+    icon: '🗺️',
+    title: 'マップでトイレを探そう',
+    desc: '地図上の「WC」マーカーをタップするとトイレの詳細が表示されます。下のシートを上にスワイプすると一覧が見られます。',
+  },
+  {
+    icon: '➕',
+    title: 'トイレを登録しよう',
+    desc: '右下の「＋」ボタンか、地図をタップして新しいトイレを追加できます。みんなに役立つ情報を共有しましょう！',
+  },
+  {
+    icon: '❤️',
+    title: 'お気に入りに保存',
+    desc: 'よく使うトイレはハートボタンでお気に入り登録。下のナビから「お気に入り」タブで一覧確認できます。',
+  },
+  {
+    icon: '🏆',
+    title: 'ランキングに挑戦',
+    desc: 'トイレを登録するとポイントが貯まります。たくさん登録してランキング上位を目指そう！',
+  },
+];
+
+let obStep = 0;
+
+function showOnboarding() {
+  obStep = 0;
+  renderOnboardingStep();
+  document.getElementById('onboarding-overlay').classList.add('open');
+}
+
+function renderOnboardingStep() {
+  const s = ONBOARDING_STEPS[obStep];
+  document.getElementById('ob-icon').textContent = s.icon;
+  document.getElementById('ob-title').textContent = s.title;
+  document.getElementById('ob-desc').textContent = s.desc;
+  // dots
+  const dots = document.getElementById('ob-dots');
+  dots.innerHTML = ONBOARDING_STEPS.map((_, i) =>
+    `<div class="onboarding-dot ${i === obStep ? 'active' : ''}"></div>`
+  ).join('');
+  // next button label
+  const isLast = obStep === ONBOARDING_STEPS.length - 1;
+  document.getElementById('ob-next-btn').textContent = isLast ? 'はじめる' : '次へ';
+}
+
+function onboardingNext() {
+  if (obStep < ONBOARDING_STEPS.length - 1) {
+    obStep++;
+    renderOnboardingStep();
+  } else {
+    closeOnboarding();
+  }
+}
+
+function closeOnboarding() {
+  document.getElementById('onboarding-overlay').classList.remove('open');
+  localStorage.setItem('toilradar_onboarded', '1');
+}
 </script>
 </body>
 </html>
