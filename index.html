@@ -1971,6 +1971,8 @@ async function deleteToilet() {
 // ============================================================
 // 現在地
 // ============================================================
+let myLocationMarker = null;
+
 async function goToCurrentLocation() {
   try {
     let pos;
@@ -1982,8 +1984,27 @@ async function goToCurrentLocation() {
     } else {
       pos = await new Promise((res,rej)=>{ if(!navigator.geolocation){rej();return;} navigator.geolocation.getCurrentPosition(r=>res(r.coords),rej); });
     }
-    if (map) map.panTo({ lat: pos.latitude, lng: pos.longitude });
-    if (map && map.getZoom() < 15) map.setZoom(16);
+    const latlng = { lat: pos.latitude, lng: pos.longitude };
+    if (map) { map.panTo(latlng); if (map.getZoom() < 15) map.setZoom(16); }
+
+    // 現在地マーカー（青い丸）
+    if (myLocationMarker) myLocationMarker.setMap(null);
+    const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+      <circle cx="12" cy="12" r="10" fill="#1a73e8" fill-opacity="0.2" stroke="#1a73e8" stroke-width="2"/>
+      <circle cx="12" cy="12" r="5" fill="#1a73e8"/>
+      <circle cx="12" cy="12" r="10" fill="none" stroke="white" stroke-width="2.5"/>
+    </svg>`;
+    myLocationMarker = new google.maps.Marker({
+      position: latlng,
+      map,
+      icon: {
+        url: 'data:image/svg+xml;charset=UTF-8,' + encodeURIComponent(svg),
+        scaledSize: new google.maps.Size(24, 24),
+        anchor: new google.maps.Point(12, 12),
+      },
+      title: '現在地',
+      zIndex: 200,
+    });
     showToast('現在地に移動しました');
   } catch { showToast('位置情報を取得できませんでした'); }
 }
