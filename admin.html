@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Toilradar 管理者ページ</title>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #f5f7fa; color: #1a1a1a; }
+
+    /* ===== ログイン画面 ===== */
+    #login-screen {
+      min-height: 100vh; display: none; align-items: center; justify-content: center;
+      background: linear-gradient(135deg, #1a73e8 0%, #0d47a1 100%);
+    }
+    .login-box {
+      background: white; border-radius: 20px; padding: 40px 36px;
+      width: 340px; box-shadow: 0 12px 40px rgba(0,0,0,0.2); text-align: center;
+    }
+    .login-logo { font-size: 2.8rem; margin-bottom: 8px; }
+    .login-box h1 { font-size: 1.2rem; color: #333; margin-bottom: 4px; }
+    .login-box p  { font-size: 0.82rem; color: #aaa; margin-bottom: 28px; }
+    .login-box input {
+      width: 100%; border: 1.5px solid #e0e0e0; border-radius: 10px;
+      padding: 12px 14px; font-size: 1rem; margin-bottom: 14px;
+      outline: none; transition: border 0.2s;
+    }
+    .login-box input:focus { border-color: #1a73e8; }
+    .login-btn {
+      width: 100%; background: #1a73e8; color: white; border: none;
+      border-radius: 10px; padding: 13px; font-size: 1rem; font-weight: 700;
+      cursor: pointer; transition: opacity 0.15s;
+    }
+    .login-btn:hover { opacity: 0.88; }
+    .login-error { color: #ea4335; font-size: 0.82rem; margin-top: 10px; }
+
+    /* ===== 管理画面 ===== */
+    #admin-screen { display: none; min-height: 100vh; }
+
+    .admin-header {
+      background: #1a73e8; color: white; padding: 16px 24px;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; z-index: 100;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .admin-header h1 { font-size: 1.1rem; font-weight: 700; }
+    .admin-header span { font-size: 0.8rem; opacity: 0.8; }
+    .logout-btn {
+      background: rgba(255,255,255,0.2); border: none; color: white;
+      padding: 7px 14px; border-radius: 8px; cursor: pointer; font-size: 0.85rem;
+    }
+    .logout-btn:hover { background: rgba(255,255,255,0.3); }
+
+    /* ===== 統計カード ===== */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+      padding: 24px 24px 0;
+    }
+    .stat-card {
+      background: white; border-radius: 14px; padding: 20px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06); text-align: center;
+    }
+    .stat-card .stat-num { font-size: 2.4rem; font-weight: 800; color: #1a73e8; }
+    .stat-card .stat-num.red { color: #ea4335; }
+    .stat-card .stat-num.green { color: #34a853; }
+    .stat-card .stat-label { font-size: 0.78rem; color: #888; margin-top: 4px; }
+
+    /* ===== タブ ===== */
+    .tabs {
+      display: flex; gap: 4px; padding: 20px 24px 0;
+    }
+    .tab-btn {
+      padding: 9px 20px; border: none; border-radius: 10px 10px 0 0;
+      font-size: 0.9rem; font-weight: 600; cursor: pointer;
+      background: #e8edf4; color: #666; transition: all 0.15s;
+    }
+    .tab-btn.active { background: white; color: #1a73e8; }
+    .tab-content {
+      background: white; margin: 0 24px 24px;
+      border-radius: 0 14px 14px 14px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+      overflow: hidden;
+    }
+
+    /* ===== テーブル共通 ===== */
+    .table-toolbar {
+      padding: 16px 20px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; gap: 12px;
+    }
+    .search-box {
+      flex: 1; border: 1.5px solid #e0e0e0; border-radius: 8px;
+      padding: 8px 12px; font-size: 0.9rem; outline: none;
+    }
+    .search-box:focus { border-color: #1a73e8; }
+    .refresh-btn {
+      background: #f1f3f4; border: none; border-radius: 8px;
+      padding: 8px 14px; font-size: 0.85rem; cursor: pointer; color: #555;
+    }
+    .refresh-btn:hover { background: #e8edf4; }
+
+    table { width: 100%; border-collapse: collapse; }
+    th {
+      background: #f8f9fa; font-size: 0.78rem; color: #888;
+      text-align: left; padding: 10px 16px; font-weight: 600;
+      text-transform: uppercase; letter-spacing: 0.04em;
+      border-bottom: 1px solid #f0f0f0;
+    }
+    td { padding: 12px 16px; font-size: 0.88rem; border-bottom: 1px solid #f5f5f5; vertical-align: middle; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: #fafbff; }
+
+    .badge {
+      display: inline-block; font-size: 0.72rem; padding: 2px 8px;
+      border-radius: 20px; font-weight: 600;
+    }
+    .badge-blue   { background: #e8f0fe; color: #1a73e8; }
+    .badge-green  { background: #e6f4ea; color: #34a853; }
+    .badge-orange { background: #fef3e0; color: #e37400; }
+    .badge-red    { background: #fce8e6; color: #ea4335; }
+    .badge-gray   { background: #f1f3f4; color: #666; }
+
+    .access-badge {
+      font-size: 0.72rem; padding: 2px 8px; border-radius: 20px;
+      background: #fff3e0; color: #e37400; font-weight: 600;
+    }
+
+    .action-btn {
+      border: none; border-radius: 7px; padding: 5px 12px;
+      font-size: 0.78rem; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+      margin-right: 4px;
+    }
+    .action-btn:hover { opacity: 0.8; }
+    .btn-del  { background: #fce8e6; color: #ea4335; }
+    .btn-ok   { background: #e6f4ea; color: #34a853; }
+    .btn-view { background: #e8f0fe; color: #1a73e8; }
+
+    .empty-row td { text-align: center; padding: 40px; color: #bbb; font-size: 0.9rem; }
+    .loading-row td { text-align: center; padding: 40px; color: #bbb; }
+    .btn-edit { background: #fff3e0; color: #e37400; }
+
+    /* ===== 編集モーダル ===== */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.45);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .edit-modal {
+      background: white; border-radius: 18px; padding: 0;
+      width: 560px; max-width: calc(100vw - 32px); max-height: 90vh;
+      overflow-y: auto; box-shadow: 0 16px 48px rgba(0,0,0,0.25);
+    }
+    .edit-modal-header {
+      padding: 20px 24px 16px; border-bottom: 1px solid #f0f0f0;
+      display: flex; align-items: center; justify-content: space-between;
+      position: sticky; top: 0; background: white; z-index: 10;
+      border-radius: 18px 18px 0 0;
+    }
+    .edit-modal-header h2 { font-size: 1.05rem; font-weight: 700; color: #1a1a1a; }
+    .modal-close {
+      background: #f1f3f4; border: none; border-radius: 50%; width: 32px; height: 32px;
+      font-size: 1.1rem; cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: #666;
+    }
+    .modal-close:hover { background: #e8edf4; }
+    .edit-modal-body { padding: 20px 24px; }
+    .form-row { margin-bottom: 16px; }
+    .form-row label { display: block; font-size: 0.82rem; font-weight: 600; color: #555; margin-bottom: 6px; }
+    .form-row input[type="text"], .form-row select, .form-row textarea {
+      width: 100%; border: 1.5px solid #e0e0e0; border-radius: 10px;
+      padding: 10px 12px; font-size: 0.92rem; outline: none;
+      font-family: inherit; transition: border 0.2s;
+    }
+    .form-row input:focus, .form-row select:focus, .form-row textarea:focus { border-color: #1a73e8; }
+    .form-row textarea { resize: vertical; min-height: 72px; }
+    .coords-row { display: flex; gap: 10px; }
+    .coords-row input { flex: 1; }
+    .star-row { display: flex; flex-direction: row-reverse; gap: 4px; }
+    .star-row input { display: none; }
+    .star-row label {
+      font-size: 1.6rem; cursor: pointer; color: #ddd; transition: color 0.1s;
+    }
+    .star-row input:checked ~ label,
+    .star-row label:hover,
+    .star-row label:hover ~ label { color: #f4b400; }
+    .check-group { display: flex; flex-wrap: wrap; gap: 10px; }
+    .check-group label {
+      display: flex; align-items: center; gap: 5px;
+      font-size: 0.85rem; color: #444; cursor: pointer; margin-bottom: 0;
+    }
+    .check-group input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; }
+    .edit-modal-footer {
+      padding: 16px 24px 20px; border-top: 1px solid #f0f0f0;
+      display: flex; gap: 10px; justify-content: flex-end;
+      position: sticky; bottom: 0; background: white;
+      border-radius: 0 0 18px 18px;
+    }
+    .btn-cancel {
+      background: #f1f3f4; border: none; border-radius: 10px;
+      padding: 10px 20px; font-size: 0.92rem; cursor: pointer; color: #555;
+    }
+    .btn-cancel:hover { background: #e8edf4; }
+    .btn-save {
+      background: #1a73e8; border: none; border-radius: 10px;
+      padding: 10px 24px; font-size: 0.92rem; font-weight: 700;
+      cursor: pointer; color: white; transition: opacity 0.15s;
+    }
+    .btn-save:hover { opacity: 0.88; }
+    .btn-save:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    /* ===== レスポンシブ ===== */
+    @media (max-width: 600px) {
+      .stats-grid { grid-template-columns: repeat(3, 1fr); gap: 10px; padding: 16px 16px 0; }
+      .stat-card { padding: 14px 8px; }
+      .stat-card .stat-num { font-size: 1.8rem; }
+      .tabs, .tab-content { margin-left: 16px; margin-right: 16px; }
+      .table-toolbar { padding: 12px; }
+      td, th { padding: 10px 10px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- ===== ログイン画面 ===== -->
+<div id="login-screen">
+  <div class="login-box">
+    <div class="login-logo">🚻</div>
+    <h1>Toilradar 管理者</h1>
+    <p>管理者アカウントでログインしてください</p>
+    <input type="email" id="email-input" placeholder="メールアドレス"
+      onkeydown="if(event.key==='Enter')document.getElementById('pw-input').focus()">
+    <input type="password" id="pw-input" placeholder="パスワード"
+      onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="login-btn" id="login-btn" onclick="doLogin()">ログイン</button>
+    <div class="login-error" id="login-error"></div>
+  </div>
+</div>
+
+<!-- ===== 管理画面 ===== -->
+<div id="admin-screen">
+  <div class="admin-header">
+    <div>
+      <h1>🚻 Toilradar 管理者ページ</h1>
+      <span id="last-updated"></span>
+    </div>
+    <button class="logout-btn" onclick="doLogout()">ログアウト</button>
+  </div>
+
+  <!-- 統計 -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-num" id="stat-total">—</div>
+      <div class="stat-label">総トイレ数</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num red" id="stat-reports">—</div>
+      <div class="stat-label">未処理の通報</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-num green" id="stat-week">—</div>
+      <div class="stat-label">今週の追加</div>
+    </div>
+  </div>
+
+  <!-- タブ -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('reports')">🚩 通報管理</button>
+    <button class="tab-btn" onclick="switchTab('toilets')">🚻 トイレ一覧</button>
+  </div>
+
+  <!-- 通報管理タブ -->
+  <div class="tab-content" id="tab-reports">
+    <div class="table-toolbar">
+      <span style="font-size:0.85rem;color:#888">通報された投稿を確認し、対応してください</span>
+      <button class="refresh-btn" onclick="loadReports()">↺ 更新</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>通報日時</th>
+          <th>対象トイレ</th>
+          <th>場所</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="reports-tbody">
+        <tr class="loading-row"><td colspan="4">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <!-- トイレ一覧タブ -->
+  <div class="tab-content" id="tab-toilets" style="display:none">
+    <div class="table-toolbar">
+      <input type="text" class="search-box" id="toilet-search"
+        placeholder="名前で検索..." oninput="filterToilets()">
+      <button class="refresh-btn" onclick="loadToilets()">↺ 更新</button>
+    </div>
+    <table>
+      <thead>
+        <tr>
+          <th>名前</th>
+          <th>種別</th>
+          <th>利用条件</th>
+          <th>清潔さ</th>
+          <th>登録日</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody id="toilets-tbody">
+        <tr class="loading-row"><td colspan="6">読み込み中...</td></tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- ===== 編集モーダル ===== -->
+<div class="modal-overlay" id="edit-modal-overlay" onclick="if(event.target===this)closeEditModal()">
+  <div class="edit-modal">
+    <div class="edit-modal-header">
+      <h2>トイレ情報を編集</h2>
+      <button class="modal-close" onclick="closeEditModal()">&#10005;</button>
+    </div>
+    <div class="edit-modal-body">
+      <div class="form-row">
+        <label>名前・場所名 <span style="color:#ea4335">*</span></label>
+        <input type="text" id="e-name" maxlength="50" placeholder="例: ○○公園 公衆トイレ">
+      </div>
+      <div class="form-row">
+        <label>種別</label>
+        <select id="e-type">
+          <option value="男女共用">男女共用</option>
+          <option value="男女別">男女別</option>
+          <option value="多目的">多目的</option>
+          <option value="その他">その他</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>利用条件</label>
+        <select id="e-access">
+          <option value="誰でも利用可">誰でも利用可</option>
+          <option value="店舗利用者のみ">店舗利用者のみ</option>
+          <option value="施設利用者のみ">施設利用者のみ</option>
+          <option value="会員・宿泊者のみ">会員・宿泊者のみ</option>
+          <option value="購入者のみ">購入者のみ</option>
+          <option value="不明">不明</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <label>清潔さ</label>
+        <div class="star-row">
+          <input type="radio" name="e-rating" id="er5" value="5"><label for="er5">&#9733;</label>
+          <input type="radio" name="e-rating" id="er4" value="4"><label for="er4">&#9733;</label>
+          <input type="radio" name="e-rating" id="er3" value="3"><label for="er3">&#9733;</label>
+          <input type="radio" name="e-rating" id="er2" value="2"><label for="er2">&#9733;</label>
+          <input type="radio" name="e-rating" id="er1" value="1"><label for="er1">&#9733;</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>設備</label>
+        <div class="check-group">
+          <label><input type="checkbox" id="e-washlet">ウォシュレット</label>
+          <label><input type="checkbox" id="e-accessible">車椅子対応</label>
+          <label><input type="checkbox" id="e-babyChange">おむつ替え</label>
+          <label><input type="checkbox" id="e-24h">24時間利用可</label>
+          <label><input type="checkbox" id="e-paid">有料</label>
+        </div>
+      </div>
+      <div class="form-row">
+        <label>メモ</label>
+        <textarea id="e-notes" maxlength="200" placeholder="特記事項など（任意）"></textarea>
+      </div>
+      <div class="form-row">
+        <label>座標 (緯度 / 経度)</label>
+        <div class="coords-row">
+          <input type="text" id="e-lat" placeholder="緯度 (例: 35.68123)">
+          <input type="text" id="e-lng" placeholder="経度 (例: 139.76745)">
+        </div>
+      </div>
+    </div>
+    <div class="edit-modal-footer">
+      <button class="btn-cancel" onclick="closeEditModal()">キャンセル</button>
+      <button class="btn-save" id="save-btn" onclick="saveEdit()">保存する</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ============================================================
+// 設定
+// ============================================================
+const FB_CONFIG = {
+  apiKey: "AIzaSyA6ByUXn5hYbFnF8qy4g2XerPsSAwZUPb8",
+  authDomain: "wanttoilet.firebaseapp.com",
+  projectId: "wanttoilet",
+  storageBucket: "wanttoilet.firebasestorage.app",
+  messagingSenderId: "995202029830",
+  appId: "1:995202029830:web:70b924a642d14425c82687"
+};
+
+// ============================================================
+// 初期化
+// ============================================================
+let db, auth, toiletsRef, reportsRef;
+let allToilets = [], allReports = [];
+
+firebase.initializeApp(FB_CONFIG);
+db = firebase.firestore();
+auth = firebase.auth();
+toiletsRef = db.collection('toilets');
+reportsRef = db.collection('reports');
+
+// 認証状態を監視
+auth.onAuthStateChanged(async user => {
+  if (!user) {
+    document.getElementById('login-screen').style.display = 'flex';
+    document.getElementById('admin-screen').style.display = 'none';
+    return;
+  }
+  // Firestore で isAdmin を確認
+  try {
+    const snap = await db.collection('users').doc(user.uid).get();
+    if (snap.exists && snap.data().isAdmin === true) {
+      showAdmin();
+    } else {
+      // 管理者権限なし → サインアウト
+      await auth.signOut();
+      showError('管理者権限がありません。管理者アカウントでログインしてください。');
+    }
+  } catch(e) {
+    await auth.signOut();
+    showError('権限確認に失敗しました: ' + e.message);
+  }
+});
+
+// ============================================================
+// ログイン
+// ============================================================
+async function doLogin() {
+  const email = document.getElementById('email-input').value.trim();
+  const pw = document.getElementById('pw-input').value;
+  const btn = document.getElementById('login-btn');
+  const errEl = document.getElementById('login-error');
+
+  if (!email || !pw) { showError('メールアドレスとパスワードを入力してください'); return; }
+
+  btn.disabled = true; btn.textContent = 'ログイン中...';
+  errEl.textContent = '';
+  try {
+    await auth.signInWithEmailAndPassword(email, pw);
+    // onAuthStateChanged が発火して管理者チェックが行われる
+  } catch(e) {
+    showError(authErrorMessage(e.code));
+    btn.disabled = false; btn.textContent = 'ログイン';
+  }
+}
+
+function showError(msg) {
+  document.getElementById('login-error').textContent = msg;
+  const btn = document.getElementById('login-btn');
+  if (btn) { btn.disabled = false; btn.textContent = 'ログイン'; }
+}
+
+function authErrorMessage(code) {
+  switch(code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+    case 'auth/invalid-credential': return 'メールアドレスまたはパスワードが違います';
+    case 'auth/too-many-requests': return 'ログイン試行が多すぎます。しばらく待ってください';
+    case 'auth/invalid-email': return 'メールアドレスの形式が正しくありません';
+    default: return 'ログインエラー: ' + code;
+  }
+}
+
+async function doLogout() {
+  await auth.signOut();
+}
+
+function showAdmin() {
+  document.getElementById('login-screen').style.display = 'none';
+  document.getElementById('admin-screen').style.display = 'block';
+  loadAll();
+}
+
+// ============================================================
+// データ読み込み
+// ============================================================
+async function loadAll() {
+  await Promise.all([loadToilets(), loadReports()]);
+  updateStats();
+  document.getElementById('last-updated').textContent =
+    '最終更新: ' + new Date().toLocaleTimeString('ja-JP');
+}
+
+async function loadToilets() {
+  const snap = await toiletsRef.orderBy('addedAt', 'desc').get();
+  allToilets = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderToilets(allToilets);
+  updateStats();
+}
+
+async function loadReports() {
+  const snap = await reportsRef.orderBy('reportedAt', 'desc').get();
+  allReports = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderReports();
+  updateStats();
+}
+
+// ============================================================
+// 統計
+// ============================================================
+function updateStats() {
+  document.getElementById('stat-total').textContent = allToilets.length;
+  document.getElementById('stat-reports').textContent = allReports.length;
+
+  const oneWeekAgo = new Date();
+  oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+  const weekCount = allToilets.filter(t => {
+    if (!t.addedAt) return false;
+    return t.addedAt.toDate ? t.addedAt.toDate() > oneWeekAgo : false;
+  }).length;
+  document.getElementById('stat-week').textContent = weekCount;
+}
+
+// ============================================================
+// 通報管理
+// ============================================================
+function renderReports() {
+  const tbody = document.getElementById('reports-tbody');
+  if (allReports.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="4">✅ 未処理の通報はありません</td></tr>';
+    return;
+  }
+  tbody.innerHTML = allReports.map(r => {
+    const toilet = allToilets.find(t => t.id === r.toiletId);
+    const date = r.reportedAt?.toDate
+      ? r.reportedAt.toDate().toLocaleString('ja-JP')
+      : '—';
+    const name = toilet ? esc(toilet.name) : '<span style="color:#aaa">（削除済み）</span>';
+    const location = toilet
+      ? `<span style="font-size:0.78rem;color:#888">${toilet.lat?.toFixed(4)}, ${toilet.lng?.toFixed(4)}</span>`
+      : '—';
+    return `<tr>
+      <td>${date}</td>
+      <td>${name}</td>
+      <td>${location}</td>
+      <td>
+        ${toilet ? `<button class="action-btn btn-del" onclick="deleteToiletAndReport('${toilet.id}','${r.id}')">🗑️ 投稿削除</button>` : ''}
+        <button class="action-btn btn-ok" onclick="dismissReport('${r.id}')">✓ 却下</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+async function deleteToiletAndReport(toiletId, reportId) {
+  if (!confirm('この投稿を削除しますか？\n（トイレ情報と通報記録の両方が削除されます）')) return;
+  await toiletsRef.doc(toiletId).delete();
+  await reportsRef.doc(reportId).delete();
+  await loadAll();
+}
+
+async function dismissReport(reportId) {
+  if (!confirm('この通報を却下しますか？（トイレ情報は残ります）')) return;
+  await reportsRef.doc(reportId).delete();
+  await loadAll();
+}
+
+// ============================================================
+// トイレ一覧
+// ============================================================
+function renderToilets(list) {
+  const tbody = document.getElementById('toilets-tbody');
+  if (list.length === 0) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="6">トイレ情報がありません</td></tr>';
+    return;
+  }
+  const TYPE_COLOR = { '男女共用':'badge-blue', '男女別':'badge-green', '多目的':'badge-orange', 'その他':'badge-gray' };
+  tbody.innerHTML = list.map(t => {
+    const date = t.addedAt?.toDate
+      ? t.addedAt.toDate().toLocaleDateString('ja-JP')
+      : '—';
+    const stars = t.rating ? '★'.repeat(t.rating) + '☆'.repeat(5 - t.rating) : '未評価';
+    const typeClass = TYPE_COLOR[t.type] || 'badge-gray';
+    const accessBadge = t.access && t.access !== '誰でも利用可'
+      ? `<span class="access-badge">🔑 ${esc(t.access)}</span>`
+      : '<span style="color:#aaa;font-size:0.8rem">誰でも</span>';
+    return `<tr>
+      <td><strong>${esc(t.name)}</strong></td>
+      <td><span class="badge ${typeClass}">${esc(t.type)}</span></td>
+      <td>${accessBadge}</td>
+      <td style="font-size:0.85rem;color:#f4b400">${stars}</td>
+      <td style="color:#888;font-size:0.82rem">${date}</td>
+      <td>
+        <button class="action-btn btn-view" onclick="openOnMap('${t.lat}','${t.lng}')">地図</button>
+        <button class="action-btn btn-edit" onclick="openEditModal('${t.id}')">編集</button>
+        <button class="action-btn btn-del" onclick="deleteToilet('${t.id}')">削除</button>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterToilets() {
+  const q = document.getElementById('toilet-search').value.toLowerCase();
+  const filtered = q ? allToilets.filter(t => (t.name || '').toLowerCase().includes(q)) : allToilets;
+  renderToilets(filtered);
+}
+
+async function deleteToilet(id) {
+  const t = allToilets.find(x => x.id === id);
+  if (!confirm(`「${t?.name}」を削除しますか？`)) return;
+  await toiletsRef.doc(id).delete();
+  await loadAll();
+}
+
+function openOnMap(lat, lng) {
+  window.open(`https://www.google.com/maps?q=${lat},${lng}`, '_blank');
+}
+
+// ============================================================
+// タブ切り替え
+// ============================================================
+function switchTab(name) {
+  document.getElementById('tab-reports').style.display = name === 'reports' ? 'block' : 'none';
+  document.getElementById('tab-toilets').style.display = name === 'toilets'  ? 'block' : 'none';
+  document.querySelectorAll('.tab-btn').forEach((b, i) => {
+    b.classList.toggle('active', (i === 0 && name === 'reports') || (i === 1 && name === 'toilets'));
+  });
+}
+
+// ============================================================
+// 編集モーダル
+// ============================================================
+let editingToiletId = null;
+
+function openEditModal(id) {
+  const t = allToilets.find(x => x.id === id);
+  if (!t) return;
+  editingToiletId = id;
+
+  document.getElementById('e-name').value = t.name || '';
+  document.getElementById('e-type').value = t.type || '男女共用';
+  document.getElementById('e-access').value = t.access || '誰でも利用可';
+  document.querySelectorAll('input[name="e-rating"]').forEach(r => r.checked = false);
+  if (t.rating) {
+    const rb = document.querySelector(`input[name="e-rating"][value="${t.rating}"]`);
+    if (rb) rb.checked = true;
+  }
+  document.getElementById('e-washlet').checked = !!t.washlet;
+  document.getElementById('e-accessible').checked = !!t.accessible;
+  document.getElementById('e-babyChange').checked = !!t.babyChange;
+  document.getElementById('e-24h').checked = !!t.h24;
+  document.getElementById('e-paid').checked = !!t.paid;
+  document.getElementById('e-notes').value = t.notes || '';
+  document.getElementById('e-lat').value = t.lat !== undefined ? t.lat : '';
+  document.getElementById('e-lng').value = t.lng !== undefined ? t.lng : '';
+
+  document.getElementById('edit-modal-overlay').classList.add('open');
+}
+
+function closeEditModal() {
+  editingToiletId = null;
+  document.getElementById('edit-modal-overlay').classList.remove('open');
+}
+
+async function saveEdit() {
+  const name = document.getElementById('e-name').value.trim();
+  if (!name) { alert('名前を入力してください'); return; }
+
+  const lat = parseFloat(document.getElementById('e-lat').value);
+  const lng = parseFloat(document.getElementById('e-lng').value);
+  if (isNaN(lat) || isNaN(lng)) { alert('座標が正しくありません'); return; }
+
+  const ratingEl = document.querySelector('input[name="e-rating"]:checked');
+  const data = {
+    name,
+    type: document.getElementById('e-type').value,
+    access: document.getElementById('e-access').value,
+    rating: ratingEl ? parseInt(ratingEl.value) : 0,
+    washlet: document.getElementById('e-washlet').checked,
+    accessible: document.getElementById('e-accessible').checked,
+    babyChange: document.getElementById('e-babyChange').checked,
+    h24: document.getElementById('e-24h').checked,
+    paid: document.getElementById('e-paid').checked,
+    notes: document.getElementById('e-notes').value.trim(),
+    lat, lng,
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+  };
+
+  const btn = document.getElementById('save-btn');
+  btn.disabled = true; btn.textContent = '保存中...';
+  try {
+    await toiletsRef.doc(editingToiletId).update(data);
+    closeEditModal();
+    await loadAll();
+    alert('保存しました');
+  } catch(e) {
+    alert('エラー: ' + e.message);
+  } finally {
+    btn.disabled = false; btn.textContent = '保存する';
+  }
+}
+
+// ============================================================
+// ユーティリティ
+// ============================================================
+function esc(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+</script>
+</body>
+</html>
