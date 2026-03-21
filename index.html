@@ -221,7 +221,7 @@
       border-radius: 12px; padding: 10px; font-size: 0.82rem; color: #e53935; cursor: pointer; margin-top: 2px;
     }
 
-    #sheet-header { flex-shrink: 0; padding: 10px 16px 8px; cursor: grab; }
+    #sheet-header { flex-shrink: 0; padding: max(10px, var(--safe-top)) 16px 8px; cursor: grab; }
     #sheet-header:active { cursor: grabbing; }
     #sheet-handle { width: 40px; height: 4px; background: #ddd; border-radius: 2px; margin: 0 auto 10px; }
     #sheet-title-row { display: flex; align-items: center; justify-content: space-between; }
