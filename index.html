@@ -228,6 +228,18 @@
     #sheet-count { font-size: 0.95rem; font-weight: 700; color: #222; }
     #sheet-count span { color: var(--blue); }
 
+    #sheet-map-btn {
+      display: none;
+      align-items: center; gap: 5px;
+      background: var(--blue); color: white;
+      border: none; border-radius: 20px;
+      padding: 6px 12px; font-size: 0.78rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    #sheet-map-btn:active { opacity: 0.85; }
+    #bottom-sheet.snap-full #sheet-map-btn,
+    #bottom-sheet.snap-half #sheet-map-btn { display: flex; }
+
     #sync-indicator { font-size: 0.75rem; display: flex; align-items: center; gap: 4px; color: #888; }
     #sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; transition: background 0.3s; }
     @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
@@ -726,9 +738,15 @@
     <div id="sheet-handle"></div>
     <div id="sheet-title-row">
       <div id="sheet-count"><span id="sheet-count-num">0</span>件のトイレ</div>
-      <div id="sync-indicator">
-        <div id="sync-dot"></div>
-        <span id="sync-label">接続中...</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button id="sheet-map-btn" onclick="setSheetSnap('peek')">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+          地図を見る
+        </button>
+        <div id="sync-indicator">
+          <div id="sync-dot"></div>
+          <span id="sync-label">接続中...</span>
+        </div>
       </div>
     </div>
   </div>
