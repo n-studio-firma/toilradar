@@ -236,9 +236,33 @@
       padding: 6px 12px; font-size: 0.78rem; font-weight: 700;
       cursor: pointer; white-space: nowrap; flex-shrink: 0;
     }
+    #sheet-map-btn.visible { display: flex; }
     #sheet-map-btn:active { opacity: 0.85; }
-    #bottom-sheet.snap-full #sheet-map-btn,
-    #bottom-sheet.snap-half #sheet-map-btn { display: flex; }
+
+    /* 詳細パネル用固定ヘッダー */
+    #sheet-detail-nav {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      padding: 2px 0 6px;
+      gap: 8px;
+    }
+    #sheet-detail-nav.active { display: flex; }
+    #sheet-title-row.detail-hidden { display: none; }
+    .detail-nav-back {
+      display: flex; align-items: center; gap: 5px;
+      background: none; border: none; color: var(--blue);
+      font-size: 0.9rem; font-weight: 600; cursor: pointer; padding: 4px 0;
+    }
+    .detail-nav-back:active { opacity: 0.7; }
+    .detail-nav-map {
+      display: flex; align-items: center; gap: 5px;
+      background: var(--blue); color: white;
+      border: none; border-radius: 20px;
+      padding: 6px 12px; font-size: 0.78rem; font-weight: 700;
+      cursor: pointer; white-space: nowrap; flex-shrink: 0;
+    }
+    .detail-nav-map:active { opacity: 0.85; }
 
     #sync-indicator { font-size: 0.75rem; display: flex; align-items: center; gap: 4px; color: #888; }
     #sync-dot { width: 8px; height: 8px; border-radius: 50%; background: #ccc; transition: background 0.3s; }
@@ -736,6 +760,7 @@
 <div id="bottom-sheet" class="snap-peek">
   <div id="sheet-header">
     <div id="sheet-handle"></div>
+    <!-- リスト表示時のヘッダー -->
     <div id="sheet-title-row">
       <div id="sheet-count"><span id="sheet-count-num">0</span>件のトイレ</div>
       <div style="display:flex;align-items:center;gap:8px">
@@ -748,6 +773,17 @@
           <span id="sync-label">接続中...</span>
         </div>
       </div>
+    </div>
+    <!-- 詳細表示時のヘッダー（常に固定表示） -->
+    <div id="sheet-detail-nav">
+      <button class="detail-nav-back" onclick="closeToiletDetail()">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+        リストに戻る
+      </button>
+      <button class="detail-nav-map" id="detail-nav-map-btn" onclick="showToiletOnMap(selectedId)">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+        地図で見る
+      </button>
     </div>
   </div>
   <div id="sheet-list">
@@ -764,10 +800,6 @@
 
   <!-- 詳細パネル -->
   <div id="sheet-detail">
-    <button class="detail-back-btn" onclick="closeToiletDetail()">
-      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
-      リストに戻る
-    </button>
     <div id="detail-content"></div>
   </div>
 </div>
@@ -2003,6 +2035,9 @@ function setSheetSnap(snap, animate = true) {
   if (!animate) requestAnimationFrame(() => sheet.classList.remove('no-tr'));
   const h = { peek: 110, half: window.innerHeight*0.5, full: window.innerHeight*0.88 };
   document.getElementById('fab-group').style.bottom = (h[snap] + NAV_HEIGHT + 16) + 'px';
+  // 地図を見るボタンの表示制御（詳細パネル非表示時のみ）
+  const isDetail = document.getElementById('sheet-detail').classList.contains('active');
+  document.getElementById('sheet-map-btn').classList.toggle('visible', snap !== 'peek' && !isDetail);
 }
 
 function onDS(e) { dragStartY=(e.touches?.[0]||e).clientY; dragStartT=getTranslateY(sheet); isDragging=true; sheet.classList.add('no-tr'); }
@@ -2103,11 +2138,19 @@ function openToiletDetail(id) {
   document.getElementById('sheet-list').classList.add('detail-open');
   document.getElementById('sheet-detail').classList.add('active');
   document.getElementById('sheet-detail').scrollTop = 0;
+  // ヘッダーを詳細モードに切り替え
+  document.getElementById('sheet-title-row').classList.add('detail-hidden');
+  document.getElementById('sheet-detail-nav').classList.add('active');
+  document.getElementById('sheet-map-btn').classList.remove('visible');
 }
 
 function closeToiletDetail() {
   document.getElementById('sheet-detail').classList.remove('active');
   document.getElementById('sheet-list').classList.remove('detail-open');
+  // ヘッダーをリストモードに戻す
+  document.getElementById('sheet-title-row').classList.remove('detail-hidden');
+  document.getElementById('sheet-detail-nav').classList.remove('active');
+  document.getElementById('sheet-map-btn').classList.toggle('visible', currentSnap !== 'peek');
 }
 
 function showToiletOnMap(id) {
